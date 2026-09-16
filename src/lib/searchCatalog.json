@@ -1,0 +1,1444 @@
+{
+  "sources": [
+    {
+      "id": "openalex",
+      "name": "OpenAlex",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Global multidisciplinary scholarly works (250M+ records)",
+      "credentials": [
+        "openalex_email",
+        "openalex_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "semantic_scholar",
+      "name": "Semantic Scholar",
+      "group": "CS, AI & Engineering",
+      "desc": "AI citation graph and paper summaries (Allen AI)",
+      "credentials": [
+        "semantic_scholar_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "arxiv",
+      "name": "arXiv",
+      "group": "CS, AI & Engineering",
+      "desc": "Preprints in computer science, mathematics, physics and AI",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "pubmed",
+      "name": "PubMed / MEDLINE",
+      "group": "Biomedical & Clinical",
+      "desc": "Global biomedical and clinical trial index (NCBI)",
+      "credentials": [
+        "ncbi_api_key",
+        "ncbi_email"
+      ],
+      "available": true
+    },
+    {
+      "id": "vjol",
+      "name": "VJOL",
+      "group": "Vietnamese Journals",
+      "desc": "130+ Vietnamese scholarly journals online (NASATI - MOST)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "vast",
+      "name": "VAST",
+      "group": "Vietnamese Journals",
+      "desc": "Vietnam Academy of Science and Technology (VJST, VJM, VJC, CIP, VJB)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "jst_hust",
+      "name": "JST HUST",
+      "group": "Vietnamese Journals",
+      "desc": "Journal of Science and Technology, Hanoi University of Science and Technology",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "medpharmres",
+      "name": "MedPharmRes",
+      "group": "Vietnamese Journals",
+      "desc": "Medical and Pharmaceutical Research (UMP) — HTTPS endpoint offline",
+      "credentials": [],
+      "available": false
+    },
+    {
+      "id": "tapchi_yhoc_tphcm",
+      "name": "Ho Chi Minh City Journal of Medicine",
+      "group": "Vietnamese Journals",
+      "desc": "Ho Chi Minh City Journal of Medicine (UMP HCMC) — host no longer serves the journal",
+      "credentials": [],
+      "available": false
+    },
+    {
+      "id": "vista_nasati",
+      "name": "VISTA NASATI",
+      "group": "Vietnamese Journals",
+      "desc": "Vietnam national science and technology information portal (MOST)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "group": "AI & Syntheses",
+      "desc": "Real-time AI academic discovery (Sonar Pro)",
+      "credentials": [
+        "perplexity_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "consensus",
+      "name": "Consensus.app",
+      "group": "AI & Syntheses",
+      "desc": "Scientific evidence search with RCT / meta-analysis tagging (session required)",
+      "credentials": [
+        "consensus_session"
+      ],
+      "available": true
+    },
+    {
+      "id": "openevidence",
+      "name": "OpenEvidence",
+      "group": "AI & Syntheses",
+      "desc": "Clinical medical evidence synthesis assistant (session required)",
+      "credentials": [
+        "openevidence_session"
+      ],
+      "available": true
+    },
+    {
+      "id": "crossref",
+      "name": "Crossref",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Global DOI and publication metadata index (150M+ records)",
+      "credentials": [
+        "crossref_email"
+      ],
+      "available": true
+    },
+    {
+      "id": "europe_pmc",
+      "name": "Europe PMC",
+      "group": "Biomedical & Clinical",
+      "desc": "Biomedical articles, preprints and Open Access full text",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "dblp",
+      "name": "DBLP",
+      "group": "CS, AI & Engineering",
+      "desc": "Computer science bibliography and major conference proceedings",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "core",
+      "name": "CORE",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Largest aggregator of institutional repositories (UK)",
+      "credentials": [
+        "core_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "doaj",
+      "name": "DOAJ",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Directory of peer-reviewed, high-quality open access journals",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "openaire",
+      "name": "OpenAIRE",
+      "group": "Multidisciplinary Indexes",
+      "desc": "European open science infrastructure (Open Access Infrastructure)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "scopus",
+      "name": "Scopus",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Elsevier ISI/Scopus citation index (API key required)",
+      "credentials": [
+        "scopus_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "ieee",
+      "name": "IEEE Xplore",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Electrical, electronics, telecom and CS proceedings and journals (API key required)",
+      "credentials": [
+        "ieee_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "springer",
+      "name": "Springer Nature",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Springer and Nature Publishing journals (API key required)",
+      "credentials": [
+        "springer_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "papers_with_code",
+      "name": "Papers With Code",
+      "group": "CS, AI & Engineering",
+      "desc": "Papers With Code — folded into Hugging Face; the 'huggingface' source covers the same feed",
+      "credentials": [],
+      "available": false
+    },
+    {
+      "id": "dimensions",
+      "name": "Dimensions",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Citation, patent and grant analytics platform",
+      "credentials": [
+        "dimensions_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "biorxiv",
+      "name": "bioRxiv",
+      "group": "Biomedical & Clinical",
+      "desc": "Biology and life sciences preprints (CSHL)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "web_of_science",
+      "name": "Web of Science",
+      "group": "Multidisciplinary Indexes",
+      "desc": "Clarivate science citation index (API key required)",
+      "credentials": [
+        "wos_api_key"
+      ],
+      "available": true
+    },
+    {
+      "id": "zenodo",
+      "name": "Zenodo",
+      "group": "Data Repositories & Open Access",
+      "desc": "CERN's open research repository (papers, code, data)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "hal",
+      "name": "HAL Open Science",
+      "group": "Economics & Social Sciences",
+      "desc": "French national open archive, strong in social sciences",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face Papers",
+      "group": "CS, AI & Engineering",
+      "desc": "Daily featured ML/AI papers on Hugging Face",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "openreview",
+      "name": "OpenReview",
+      "group": "CS, AI & Engineering",
+      "desc": "Open peer review proceedings of top AI conferences (ICLR, NeurIPS)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "searxng",
+      "name": "SearXNG",
+      "group": "AI & Syntheses",
+      "desc": "Privacy-preserving academic and grey literature metasearch",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "clinicaltrials",
+      "name": "ClinicalTrials.gov",
+      "group": "Biomedical & Clinical",
+      "desc": "Clinical trial registry (US and international)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "medrxiv",
+      "name": "medRxiv",
+      "group": "Biomedical & Clinical",
+      "desc": "Medical and health sciences preprints (CSHL/BMJ/Yale)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "openfda",
+      "name": "OpenFDA",
+      "group": "Biomedical & Clinical",
+      "desc": "FDA drug labels, safety alerts and adverse events",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "cve_nvd",
+      "name": "NIST NVD (CVE)",
+      "group": "CS, AI & Engineering",
+      "desc": "US National Vulnerability Database",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "cisa_kev",
+      "name": "CISA KEV",
+      "group": "CS, AI & Engineering",
+      "desc": "CISA catalog of known exploited vulnerabilities",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "uniprot",
+      "name": "UniProt",
+      "group": "Biomedical & Clinical",
+      "desc": "World protein sequence and function database",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "clinvar",
+      "name": "ClinVar",
+      "group": "Biomedical & Clinical",
+      "desc": "Genetic variants and clinical significance (NCBI)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "hf_datasets",
+      "name": "Hugging Face Datasets",
+      "group": "Data Repositories & Open Access",
+      "desc": "AI training datasets and benchmark collections",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "dataverse",
+      "name": "Harvard Dataverse",
+      "group": "Data Repositories & Open Access",
+      "desc": "Harvard open research data repository network",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "stackexchange",
+      "name": "Stack Exchange",
+      "group": "CS, AI & Engineering",
+      "desc": "Academic and technical Q&A network",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "eric",
+      "name": "ERIC",
+      "group": "Economics & Social Sciences",
+      "desc": "US Institute of Education Sciences (2M+ education records)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "econbiz",
+      "name": "EconBiz",
+      "group": "Economics & Social Sciences",
+      "desc": "German economics portal (aggregates RePEc and EconStor)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "inspire_hep",
+      "name": "INSPIRE-HEP",
+      "group": "Physics & Natural Sciences",
+      "desc": "High energy and nuclear physics (CERN, DESY, SLAC)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "datacite",
+      "name": "DataCite",
+      "group": "Data Repositories & Open Access",
+      "desc": "DOI index for research data and scientific software",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "figshare",
+      "name": "Figshare",
+      "group": "Data Repositories & Open Access",
+      "desc": "Repository for figures, datasets and research documents",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "world_bank",
+      "name": "World Bank OKR",
+      "group": "Economics & Social Sciences",
+      "desc": "World Bank policy reports and economic research",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "pmc",
+      "name": "PubMed Central (PMC)",
+      "group": "Biomedical & Clinical",
+      "desc": "Full-text biomedical research (Full-Text XML/HTML)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "plos",
+      "name": "PLOS",
+      "group": "Biomedical & Clinical",
+      "desc": "Public Library of Science - open full-text research",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "ntrs",
+      "name": "NASA NTRS",
+      "group": "Physics & Natural Sciences",
+      "desc": "NASA aerospace and mechanical engineering technical reports",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "dryad",
+      "name": "Dryad",
+      "group": "Data Repositories & Open Access",
+      "desc": "Research data repository for natural sciences and biomedicine",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "ncbi_geo",
+      "name": "NCBI GEO",
+      "group": "Biomedical & Clinical",
+      "desc": "Gene expression data repository (Gene Expression Omnibus)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "sec_edgar",
+      "name": "SEC EDGAR",
+      "group": "Economics & Social Sciences",
+      "desc": "10-K and 8-K filings of listed companies (US SEC)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "ajol",
+      "name": "AJOL",
+      "group": "Regional & Global South",
+      "desc": "Network of 500+ African scholarly journals",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "banglajol",
+      "name": "BanglaJOL",
+      "group": "Regional & Global South",
+      "desc": "Bangladesh journals online",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "nepjol",
+      "name": "NepJOL",
+      "group": "Regional & Global South",
+      "desc": "Nepal journals online",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "philjol",
+      "name": "PhilJOL",
+      "group": "Regional & Global South",
+      "desc": "Philippine Journals Online (PhilJOL) — portal retired, returns HTTP 410",
+      "credentials": [],
+      "available": false
+    },
+    {
+      "id": "mongoliajol",
+      "name": "MongoliaJOL",
+      "group": "Regional & Global South",
+      "desc": "Mongolia journals online",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "sljol",
+      "name": "SLJOL",
+      "group": "Regional & Global South",
+      "desc": "Sri Lanka journals online",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "lamjol",
+      "name": "LAMJOL",
+      "group": "Regional & Global South",
+      "desc": "Central America and the Caribbean journals online",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "thaijo",
+      "name": "ThaiJO",
+      "group": "Regional & Global South",
+      "desc": "Thai journals online system",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "tapchi_nghiencuuyhoc",
+      "name": "Journal of Medical Research (HMU)",
+      "group": "Vietnamese Journals",
+      "desc": "Journal of Medical Research (Hanoi Medical University)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "vnu_js",
+      "name": "VNU Journals",
+      "group": "Vietnamese Journals",
+      "desc": "VNU Journal of Science (Vietnam National University, Hanoi)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "cinii",
+      "name": "CiNii Research",
+      "group": "Regional & Global South",
+      "desc": "Japanese national academic database",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "vietnam",
+      "name": "OpenAlex Vietnam",
+      "group": "Vietnamese Journals",
+      "desc": "Works authored by Vietnam-affiliated research institutions (OpenAlex)",
+      "credentials": [],
+      "available": true
+    },
+    {
+      "id": "metasearch",
+      "name": "Europe PMC (MetaSearch)",
+      "group": "Biomedical & Clinical",
+      "desc": "Europe PMC and SearXNG metasearch fallback",
+      "credentials": [],
+      "available": true
+    }
+  ],
+  "presets": [
+    {
+      "id": "vietnam_academic",
+      "label": "🇻🇳 Vietnamese Scholarship (Comprehensive)",
+      "description": "VJOL, VAST, JST HUST, VNU Journals, VISTA NASATI (+6 more)",
+      "sources": [
+        "vjol",
+        "vast",
+        "jst_hust",
+        "vnu_js",
+        "vista_nasati",
+        "tapchi_nghiencuuyhoc",
+        "openalex",
+        "searxng",
+        "perplexity"
+      ],
+      "query": "phát triển kinh tế bền vững việt nam"
+    },
+    {
+      "id": "vietnam_medical",
+      "label": "🇻🇳 Vietnam Medicine & Pharmacy",
+      "description": "VJOL, Ho Chi Minh City Journal of Medicine, Journal of Medical Research (HMU), MedPharmRes, VISTA NASATI (+3 more)",
+      "sources": [
+        "vjol",
+        "tapchi_nghiencuuyhoc",
+        "vista_nasati",
+        "pubmed",
+        "openalex",
+        "perplexity"
+      ],
+      "query": "điều trị đái tháo đường típ 2"
+    },
+    {
+      "id": "vietnam_science",
+      "label": "🇻🇳 Vietnam Natural Sciences",
+      "description": "VJOL, VAST, JST HUST, VNU Journals, VISTA NASATI (+3 more)",
+      "sources": [
+        "vjol",
+        "vast",
+        "jst_hust",
+        "vnu_js",
+        "vista_nasati",
+        "openalex",
+        "searxng",
+        "perplexity"
+      ],
+      "query": "vật liệu nano composite"
+    },
+    {
+      "id": "vietnam_engineering",
+      "label": "🇻🇳 Vietnam Engineering & Technology",
+      "description": "JST HUST, VAST, VJOL, VISTA NASATI, OpenAlex",
+      "sources": [
+        "jst_hust",
+        "vast",
+        "vjol",
+        "vista_nasati",
+        "openalex"
+      ],
+      "query": "robot tự hành điều khiển thông minh"
+    },
+    {
+      "id": "vietnam_agriculture",
+      "label": "🇻🇳 Vietnam Agriculture, Forestry & Fisheries",
+      "description": "VJOL, VISTA NASATI, DOAJ, OpenAlex, SearXNG",
+      "sources": [
+        "vjol",
+        "vista_nasati",
+        "doaj",
+        "openalex",
+        "searxng"
+      ],
+      "query": "biến đổi khí hậu đồng bằng sông cửu long"
+    },
+    {
+      "id": "vietnam_economics",
+      "label": "🇻🇳 Vietnam Economics & Management",
+      "description": "VJOL, VISTA NASATI, EconBiz, DOAJ, OpenAlex (+1 more)",
+      "sources": [
+        "vjol",
+        "vista_nasati",
+        "econbiz",
+        "doaj",
+        "openalex",
+        "searxng"
+      ],
+      "query": "chuyển đổi số doanh nghiệp việt nam"
+    },
+    {
+      "id": "vietnam_education",
+      "label": "🇻🇳 Vietnam Education & Pedagogy",
+      "description": "VJOL, VISTA NASATI, ERIC, DOAJ, OpenAlex (+1 more)",
+      "sources": [
+        "vjol",
+        "vista_nasati",
+        "eric",
+        "doaj",
+        "openalex",
+        "searxng"
+      ],
+      "query": "đổi mới phương pháp dạy học đại học"
+    },
+    {
+      "id": "vietnam_social",
+      "label": "🇻🇳 Vietnam Social Sciences & Humanities",
+      "description": "VJOL, VNU Journals, VISTA NASATI, DOAJ, OpenAlex (+2 more)",
+      "sources": [
+        "vjol",
+        "vnu_js",
+        "vista_nasati",
+        "doaj",
+        "openalex",
+        "searxng",
+        "hal"
+      ],
+      "query": "bảo tồn di sản văn hóa việt nam"
+    },
+    {
+      "id": "biomedical",
+      "label": "International Biomedicine",
+      "description": "PubMed / MEDLINE, Europe PMC (MetaSearch), OpenAlex, Semantic Scholar, bioRxiv (+1 more)",
+      "sources": [
+        "pubmed",
+        "metasearch",
+        "openalex",
+        "semantic_scholar",
+        "biorxiv",
+        "europe_pmc"
+      ],
+      "query": "immunotherapy cancer checkpoint inhibitors"
+    },
+    {
+      "id": "biomedical_full",
+      "label": "Biomedicine (Full Coverage)",
+      "description": "PubMed / MEDLINE, PubMed Central (PMC), PLOS, ClinicalTrials.gov, medRxiv (+14 more)",
+      "sources": [
+        "pubmed",
+        "pmc",
+        "plos",
+        "clinicaltrials",
+        "medrxiv",
+        "vjol",
+        "tapchi_nghiencuuyhoc",
+        "vista_nasati",
+        "metasearch",
+        "openalex",
+        "semantic_scholar",
+        "biorxiv",
+        "crossref",
+        "doaj",
+        "searxng",
+        "perplexity",
+        "europe_pmc"
+      ],
+      "query": "type 2 diabetes GLP-1 receptor agonist"
+    },
+    {
+      "id": "clinical_trials",
+      "label": "Clinical Trials",
+      "description": "ClinicalTrials.gov, PubMed / MEDLINE, medRxiv, Europe PMC (MetaSearch), Europe PMC",
+      "sources": [
+        "clinicaltrials",
+        "pubmed",
+        "medrxiv",
+        "metasearch",
+        "europe_pmc"
+      ],
+      "query": "randomized controlled trial cardiovascular outcomes"
+    },
+    {
+      "id": "pharma_clinical",
+      "label": "Pharmacology & Drug Safety",
+      "description": "ClinicalTrials.gov, PubMed / MEDLINE, Europe PMC (MetaSearch), Europe PMC, OpenFDA (+1 more)",
+      "sources": [
+        "clinicaltrials",
+        "pubmed",
+        "metasearch",
+        "europe_pmc",
+        "openfda",
+        "openevidence"
+      ],
+      "query": "drug adverse reactions safety monitoring"
+    },
+    {
+      "id": "pharma_deep",
+      "label": "Pharmacology In Depth",
+      "description": "ClinicalTrials.gov, PubMed / MEDLINE, Europe PMC (MetaSearch), Europe PMC, OpenFDA",
+      "sources": [
+        "clinicaltrials",
+        "pubmed",
+        "metasearch",
+        "europe_pmc",
+        "openfda"
+      ],
+      "query": "small molecule kinase inhibitors"
+    },
+    {
+      "id": "bioinformatics",
+      "label": "Bioinformatics & Protein Structure",
+      "description": "bioRxiv, PubMed / MEDLINE, UniProt, NCBI GEO, ClinVar",
+      "sources": [
+        "biorxiv",
+        "pubmed",
+        "uniprot",
+        "ncbi_geo",
+        "clinvar"
+      ],
+      "query": "alphafold protein structure prediction"
+    },
+    {
+      "id": "global_health",
+      "label": "Global Health",
+      "description": "PubMed / MEDLINE, medRxiv, Europe PMC (MetaSearch), OpenAlex, Europe PMC",
+      "sources": [
+        "pubmed",
+        "medrxiv",
+        "metasearch",
+        "openalex",
+        "europe_pmc"
+      ],
+      "query": "pandemic preparedness epidemiology"
+    },
+    {
+      "id": "fulltext_biomedical",
+      "label": "Biomedical Full Text",
+      "description": "PubMed Central (PMC), PLOS, Europe PMC (MetaSearch), bioRxiv, medRxiv (+2 more)",
+      "sources": [
+        "pmc",
+        "plos",
+        "metasearch",
+        "biorxiv",
+        "medrxiv",
+        "openalex",
+        "europe_pmc"
+      ],
+      "query": "microbiome gut brain axis mechanism"
+    },
+    {
+      "id": "cs_ai",
+      "label": "Computer Science & AI",
+      "description": "Semantic Scholar, OpenAlex, arXiv, DBLP, Papers With Code (+3 more)",
+      "sources": [
+        "semantic_scholar",
+        "openalex",
+        "arxiv",
+        "dblp",
+        "huggingface",
+        "openreview",
+        "searxng"
+      ],
+      "query": "large language models reasoning evaluation"
+    },
+    {
+      "id": "ml_ai_deep",
+      "label": "Machine Learning & SOTA",
+      "description": "Papers With Code, Hugging Face Papers, OpenReview, arXiv, Semantic Scholar (+1 more)",
+      "sources": [
+        "huggingface",
+        "openreview",
+        "arxiv",
+        "semantic_scholar",
+        "dblp"
+      ],
+      "query": "diffusion models image generation"
+    },
+    {
+      "id": "nlp_llm",
+      "label": "Large Language Models (LLM)",
+      "description": "arXiv, Semantic Scholar, Papers With Code, OpenReview, Hugging Face Papers (+1 more)",
+      "sources": [
+        "arxiv",
+        "semantic_scholar",
+        "openreview",
+        "huggingface",
+        "dblp"
+      ],
+      "query": "retrieval augmented generation hallucination"
+    },
+    {
+      "id": "nlp_acl",
+      "label": "ACL / EMNLP / COLING Proceedings",
+      "description": "arXiv, OpenReview, Hugging Face Papers, Semantic Scholar",
+      "sources": [
+        "arxiv",
+        "openreview",
+        "huggingface",
+        "semantic_scholar"
+      ],
+      "query": "parameter efficient fine tuning LoRA"
+    },
+    {
+      "id": "cv_vision",
+      "label": "Computer Vision (CVPR/ICCV)",
+      "description": "arXiv, IEEE Xplore, Semantic Scholar, Papers With Code, OpenReview",
+      "sources": [
+        "arxiv",
+        "ieee",
+        "semantic_scholar",
+        "openreview"
+      ],
+      "query": "vision transformer object detection"
+    },
+    {
+      "id": "cyber_security",
+      "label": "Security & CVE",
+      "description": "arXiv, DBLP, SearXNG, NIST NVD (CVE), CISA KEV",
+      "sources": [
+        "arxiv",
+        "dblp",
+        "searxng",
+        "cve_nvd",
+        "cisa_kev"
+      ],
+      "query": "zero day vulnerability memory safety"
+    },
+    {
+      "id": "code_knowledge",
+      "label": "Software Architecture & Code",
+      "description": "Papers With Code, Hugging Face Papers, DBLP, Stack Exchange",
+      "sources": [
+        "huggingface",
+        "dblp",
+        "stackexchange"
+      ],
+      "query": "compiler optimization intermediate representation"
+    },
+    {
+      "id": "datasets",
+      "label": "Datasets & Benchmarks",
+      "description": "Zenodo, DataCite, Papers With Code, Dryad, Harvard Dataverse (+3 more)",
+      "sources": [
+        "zenodo",
+        "datacite",
+        "dryad",
+        "dataverse",
+        "hf_datasets",
+        "ncbi_geo",
+        "figshare"
+      ],
+      "query": "multimodal instruction tuning dataset"
+    },
+    {
+      "id": "physics",
+      "label": "Physics & Astronomy",
+      "description": "INSPIRE-HEP, arXiv, OpenAlex, Semantic Scholar",
+      "sources": [
+        "inspire_hep",
+        "arxiv",
+        "openalex",
+        "semantic_scholar"
+      ],
+      "query": "gravitational waves black hole mergers"
+    },
+    {
+      "id": "chemistry",
+      "label": "Chemistry & Materials",
+      "description": "Springer Nature, OpenAlex, Crossref",
+      "sources": [
+        "springer",
+        "openalex",
+        "crossref"
+      ],
+      "query": "battery electrolyte solid state"
+    },
+    {
+      "id": "energy_materials",
+      "label": "Energy & Nuclear",
+      "description": "arXiv, INSPIRE-HEP, OpenAlex, Crossref, DOAJ",
+      "sources": [
+        "arxiv",
+        "inspire_hep",
+        "openalex",
+        "crossref",
+        "doaj"
+      ],
+      "query": "perovskite solar cells efficiency"
+    },
+    {
+      "id": "aerospace",
+      "label": "Aerospace & Aviation",
+      "description": "arXiv, OpenAlex, IEEE Xplore, NASA NTRS",
+      "sources": [
+        "arxiv",
+        "openalex",
+        "ieee",
+        "ntrs"
+      ],
+      "query": "hypersonic propulsion aerodynamics"
+    },
+    {
+      "id": "economics",
+      "label": "Economics & Finance",
+      "description": "EconBiz, OpenAlex, Crossref, DOAJ, SEC EDGAR",
+      "sources": [
+        "econbiz",
+        "openalex",
+        "crossref",
+        "doaj",
+        "sec_edgar"
+      ],
+      "query": "central bank digital currency inflation"
+    },
+    {
+      "id": "education",
+      "label": "Education & Pedagogy",
+      "description": "ERIC, DOAJ, OpenAlex",
+      "sources": [
+        "eric",
+        "doaj",
+        "openalex"
+      ],
+      "query": "artificial intelligence in personalized learning"
+    },
+    {
+      "id": "theses",
+      "label": "Doctoral Theses (PhD)",
+      "description": "OpenAlex, HAL Open Science, EconBiz",
+      "sources": [
+        "openalex",
+        "hal",
+        "econbiz"
+      ],
+      "query": "doctoral dissertation machine learning"
+    },
+    {
+      "id": "books",
+      "label": "Open Monographs",
+      "description": "OpenAlex, Crossref",
+      "sources": [
+        "openalex",
+        "crossref"
+      ],
+      "query": "open access academic monograph"
+    },
+    {
+      "id": "humanities",
+      "label": "Humanities & Social Sciences",
+      "description": "VJOL, HAL Open Science, DOAJ, OpenAlex, Crossref",
+      "sources": [
+        "vjol",
+        "hal",
+        "doaj",
+        "openalex",
+        "crossref"
+      ],
+      "query": "digital humanities cultural heritage"
+    },
+    {
+      "id": "open_access",
+      "label": "100% Open Access (Free PDF)",
+      "description": "VJOL, VAST, DOAJ, OpenAlex, Europe PMC (MetaSearch) (+6 more)",
+      "sources": [
+        "vjol",
+        "vast",
+        "doaj",
+        "openalex",
+        "metasearch",
+        "zenodo",
+        "plos",
+        "pmc",
+        "openaire",
+        "core",
+        "europe_pmc"
+      ],
+      "query": "open science reproducible research"
+    },
+    {
+      "id": "preprints",
+      "label": "Latest Preprints",
+      "description": "arXiv, bioRxiv, medRxiv, Papers With Code, Hugging Face Papers",
+      "sources": [
+        "arxiv",
+        "biorxiv",
+        "medrxiv",
+        "huggingface"
+      ],
+      "query": "foundation models multimodal"
+    },
+    {
+      "id": "reputable",
+      "label": "Indexed Journals (ISI / Scopus)",
+      "description": "Scopus, IEEE Xplore, Springer Nature, OpenAlex, Semantic Scholar (+2 more)",
+      "sources": [
+        "scopus",
+        "ieee",
+        "springer",
+        "openalex",
+        "semantic_scholar",
+        "dimensions",
+        "web_of_science"
+      ],
+      "query": "deep learning quantum computing"
+    },
+    {
+      "id": "patents",
+      "label": "Patents",
+      "description": "SearXNG, OpenAlex",
+      "sources": [
+        "searxng",
+        "openalex"
+      ],
+      "query": "solid state battery patent"
+    },
+    {
+      "id": "asia_pacific",
+      "label": "Asia - Pacific",
+      "description": "PhilJOL, NepJOL, BanglaJOL, SLJOL, MongoliaJOL (+7 more)",
+      "sources": [
+        "nepjol",
+        "banglajol",
+        "sljol",
+        "mongoliajol",
+        "vjol",
+        "vast",
+        "vnu_js",
+        "openalex",
+        "doaj",
+        "cinii",
+        "thaijo"
+      ],
+      "query": "tropical infectious diseases asia"
+    },
+    {
+      "id": "global_south",
+      "label": "Global South Network",
+      "description": "BanglaJOL, NepJOL, PhilJOL, SLJOL, LAMJOL (+6 more)",
+      "sources": [
+        "banglajol",
+        "nepjol",
+        "sljol",
+        "lamjol",
+        "mongoliajol",
+        "vjol",
+        "vnu_js",
+        "doaj",
+        "ajol",
+        "thaijo"
+      ],
+      "query": "indigenous knowledge climate resilience"
+    },
+    {
+      "id": "africa",
+      "label": "African Research",
+      "description": "DOAJ, OpenAlex, AJOL",
+      "sources": [
+        "doaj",
+        "openalex",
+        "ajol"
+      ],
+      "query": "public health interventions sub saharan africa"
+    },
+    {
+      "id": "us_gov",
+      "label": "Government & Grey Literature",
+      "description": "SEC EDGAR, NASA NTRS, World Bank OKR",
+      "sources": [
+        "sec_edgar",
+        "ntrs",
+        "world_bank"
+      ],
+      "query": "critical minerals supply chain security"
+    },
+    {
+      "id": "funding",
+      "label": "Funding & Aid Landscape",
+      "description": "OpenAlex",
+      "sources": [
+        "openalex"
+      ],
+      "query": "alzheimer disease grant funding"
+    },
+    {
+      "id": "systematic_review",
+      "label": "Systematic Reviews (PRISMA)",
+      "description": "ClinicalTrials.gov, PubMed Central (PMC), PubMed / MEDLINE, Europe PMC (MetaSearch), Europe PMC (+1 more)",
+      "sources": [
+        "clinicaltrials",
+        "pmc",
+        "pubmed",
+        "metasearch",
+        "europe_pmc",
+        "consensus"
+      ],
+      "query": "systematic review meta analysis efficacy"
+    },
+    {
+      "id": "evidence_based",
+      "label": "Evidence-Based Medicine (EBM)",
+      "description": "PubMed Central (PMC), ClinicalTrials.gov, Europe PMC (MetaSearch), Europe PMC, Consensus.app",
+      "sources": [
+        "pmc",
+        "clinicaltrials",
+        "metasearch",
+        "europe_pmc",
+        "consensus"
+      ],
+      "query": "acupuncture chronic low back pain evidence"
+    },
+    {
+      "id": "science_web",
+      "label": "Science Web & Grey Literature",
+      "description": "SearXNG, Perplexity, OpenAlex, arXiv, Semantic Scholar",
+      "sources": [
+        "searxng",
+        "perplexity",
+        "openalex",
+        "arxiv",
+        "semantic_scholar"
+      ],
+      "query": "open science standards technical report"
+    },
+    {
+      "id": "exhaustive",
+      "label": "All Sources (Exhaustive)",
+      "description": "OpenAlex, Semantic Scholar, arXiv, PubMed / MEDLINE, VJOL (+59 more)",
+      "sources": [
+        "openalex",
+        "semantic_scholar",
+        "arxiv",
+        "pubmed",
+        "vjol",
+        "vast",
+        "jst_hust",
+        "vista_nasati",
+        "perplexity",
+        "crossref",
+        "metasearch",
+        "dblp",
+        "doaj",
+        "scopus",
+        "ieee",
+        "springer",
+        "biorxiv",
+        "zenodo",
+        "hal",
+        "huggingface",
+        "openreview",
+        "searxng",
+        "clinicaltrials",
+        "medrxiv",
+        "eric",
+        "econbiz",
+        "inspire_hep",
+        "datacite",
+        "pmc",
+        "plos",
+        "banglajol",
+        "nepjol",
+        "mongoliajol",
+        "sljol",
+        "lamjol",
+        "tapchi_nghiencuuyhoc",
+        "vnu_js",
+        "vietnam",
+        "cinii",
+        "dryad",
+        "dataverse",
+        "ntrs",
+        "world_bank",
+        "ajol",
+        "thaijo",
+        "openaire",
+        "core",
+        "dimensions",
+        "web_of_science",
+        "cve_nvd",
+        "hf_datasets",
+        "stackexchange",
+        "europe_pmc",
+        "openfda",
+        "uniprot",
+        "ncbi_geo",
+        "clinvar",
+        "figshare",
+        "sec_edgar",
+        "cisa_kev"
+      ],
+      "query": ""
+    },
+    {
+      "id": "engineering",
+      "label": "Engineering",
+      "description": "arXiv, OpenAlex, Crossref, Semantic Scholar",
+      "sources": [
+        "arxiv",
+        "openalex",
+        "crossref",
+        "semantic_scholar"
+      ],
+      "query": "renewable energy storage systems"
+    },
+    {
+      "id": "natural_sciences",
+      "label": "Natural Sciences",
+      "description": "arXiv, OpenAlex, Crossref, Semantic Scholar, Zenodo",
+      "sources": [
+        "arxiv",
+        "openalex",
+        "crossref",
+        "semantic_scholar",
+        "zenodo"
+      ],
+      "query": "quantum materials"
+    },
+    {
+      "id": "social_sciences",
+      "label": "Social Sciences",
+      "description": "OpenAlex, Crossref, DOAJ, HAL Open Science",
+      "sources": [
+        "openalex",
+        "crossref",
+        "doaj",
+        "hal"
+      ],
+      "query": "social inequality urban development"
+    },
+    {
+      "id": "law",
+      "label": "Law",
+      "description": "OpenAlex, Crossref, DOAJ, HAL Open Science",
+      "sources": [
+        "openalex",
+        "crossref",
+        "doaj",
+        "hal"
+      ],
+      "query": "data protection comparative law"
+    },
+    {
+      "id": "environment",
+      "label": "Environment",
+      "description": "OpenAlex, Crossref, DOAJ, HAL Open Science",
+      "sources": [
+        "openalex",
+        "crossref",
+        "doaj",
+        "hal"
+      ],
+      "query": "climate adaptation biodiversity"
+    },
+    {
+      "id": "agriculture",
+      "label": "Agriculture",
+      "description": "DOAJ, OpenAlex, SearXNG",
+      "sources": [
+        "doaj",
+        "openalex",
+        "searxng"
+      ],
+      "query": "sustainable agriculture soil health"
+    },
+    {
+      "id": "medical",
+      "label": "Medicine & Biomedicine",
+      "description": "PubMed / MEDLINE, OpenAlex, OpenAlex Vietnam, Crossref, Europe PMC (MetaSearch) (+1 more)",
+      "sources": [
+        "pubmed",
+        "openalex",
+        "vietnam",
+        "crossref",
+        "metasearch",
+        "doaj"
+      ],
+      "query": "cancer immunotherapy"
+    },
+    {
+      "id": "auto",
+      "label": "Auto",
+      "description": "Routes the query to the most relevant sources automatically",
+      "sources": [
+        "openalex",
+        "semantic_scholar",
+        "crossref",
+        "pubmed",
+        "arxiv",
+        "vjol",
+        "vast",
+        "vista_nasati",
+        "doaj",
+        "zenodo"
+      ],
+      "query": ""
+    },
+    {
+      "id": "multidisciplinary",
+      "label": "Multidisciplinary",
+      "description": "OpenAlex, Crossref, Semantic Scholar, DOAJ, Zenodo (+3 more)",
+      "sources": [
+        "openalex",
+        "crossref",
+        "semantic_scholar",
+        "doaj",
+        "zenodo",
+        "hal",
+        "cinii",
+        "openaire"
+      ],
+      "query": "interdisciplinary research methods"
+    },
+    {
+      "id": "vietnam",
+      "label": "Vietnamese Research",
+      "description": "OpenAlex Vietnam",
+      "sources": [
+        "vietnam"
+      ],
+      "query": "phát triển kinh tế việt nam"
+    },
+    {
+      "id": "all",
+      "label": "All Enabled Sources",
+      "description": "Queries every source enabled in the app",
+      "sources": [
+        "openalex",
+        "semantic_scholar",
+        "arxiv",
+        "pubmed",
+        "vjol",
+        "vast",
+        "jst_hust",
+        "vista_nasati",
+        "perplexity",
+        "crossref",
+        "metasearch",
+        "dblp",
+        "doaj",
+        "scopus",
+        "ieee",
+        "springer",
+        "biorxiv",
+        "zenodo",
+        "hal",
+        "huggingface",
+        "openreview",
+        "searxng",
+        "clinicaltrials",
+        "medrxiv",
+        "eric",
+        "econbiz",
+        "inspire_hep",
+        "datacite",
+        "pmc",
+        "plos",
+        "banglajol",
+        "nepjol",
+        "mongoliajol",
+        "sljol",
+        "lamjol",
+        "tapchi_nghiencuuyhoc",
+        "vnu_js",
+        "vietnam",
+        "cinii",
+        "dryad",
+        "dataverse",
+        "ntrs",
+        "world_bank",
+        "ajol",
+        "thaijo",
+        "openaire",
+        "core",
+        "dimensions",
+        "web_of_science",
+        "cve_nvd",
+        "hf_datasets",
+        "stackexchange",
+        "europe_pmc",
+        "openfda",
+        "uniprot",
+        "ncbi_geo",
+        "clinvar",
+        "figshare",
+        "sec_edgar",
+        "cisa_kev"
+      ],
+      "query": ""
+    },
+    {
+      "id": "custom",
+      "label": "Custom",
+      "description": "Uses the source list enabled in Settings",
+      "sources": [],
+      "query": ""
+    }
+  ]
+}

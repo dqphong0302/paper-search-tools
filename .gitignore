@@ -1,0 +1,34 @@
+# Node / Vite
+node_modules/
+dist/
+*.local
+.vite/
+
+# Rust / Tauri
+src-tauri/target/
+**/*.rs.bk
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Local secrets / data
+*.db
+*.db-journal
+.env
+.env.*
+.playwright-mcp/
+
+
+# Reference material from the previous Node engine, kept on disk only.
+# Nothing in the app reads it, and it carries a hardcoded sidecar key.
+# scripts/build_full_catalog.js is the only thing that imports it, and that
+# generator is stale: running it would revert the catalog to Vietnamese labels
+# and drop the `available` flags.
+engine-sources/
+scripts/build_full_catalog.js
