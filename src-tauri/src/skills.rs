@@ -75,6 +75,10 @@ pub(crate) fn directory(value: &str) -> Result<PathBuf, String> {
     let mut current = PathBuf::new();
     for part in path.components() {
         current.push(part);
+        // A Windows drive/UNC prefix is not a directory until RootDir is added.
+        if matches!(part, Component::Prefix(_)) {
+            continue;
+        }
         let meta = fs::symlink_metadata(&current).map_err(|e| e.to_string())?;
         if meta.file_type().is_symlink() || !meta.is_dir() {
             return Err("The directory must exist and must not traverse a symlink".into());

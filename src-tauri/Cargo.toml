@@ -1,6 +1,6 @@
 [package]
 name = "scholargateway"
-version = "1.0.1"
+version = "1.0.2"
 description = "Native Desktop App & Localhost Gateway for Academic Research"
 authors = ["Phong Dang"]
 edition = "2021"

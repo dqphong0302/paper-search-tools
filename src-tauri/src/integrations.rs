@@ -478,7 +478,7 @@ mod tests {
         }
         assert!(validate_definition(&json!({"url":"http://localhost:8795/mcp"})).is_ok());
         assert!(validate_definition(
-            &json!({"command":"/usr/bin/node","args":["/tmp/server.js"],"env":{"KEY":"${KEY}"}})
+            &json!({"command":std::env::current_exe().unwrap(),"args":["server.js"],"env":{"KEY":"${KEY}"}})
         )
         .is_ok());
     }
