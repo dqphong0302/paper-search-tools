@@ -6,7 +6,6 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
-  Layers,
 } from 'lucide-react';
 
 export type TabType = 'search' | 'research' | 'gateway' | 'settings';
@@ -107,7 +106,7 @@ export const SideNav: React.FC<SideNavProps> = ({
       {/* Brand Header */}
       <div className="side-nav-brand">
         <div className="brand-logo-box" title="ScholarGateway">
-          <Layers size={17} />
+          <img src="/scholargateway.png" alt="ScholarGateway" width={36} height={36} />
         </div>
         {!isCollapsed && (
           <div className="brand-text-container">

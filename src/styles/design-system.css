@@ -1118,9 +1118,10 @@ a.action-btn:hover {
   width: 36px;
   height: 36px;
   border-radius: 11px;
-  background: var(--primary-cyan);
+  background: transparent;
   box-shadow: none;
 }
+.brand-logo-box img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .brand-app-name { color: var(--text-main); font-size: 14px; }
 .brand-app-sub { color: var(--text-dim); letter-spacing: 0.04em; }
 .nav-group { margin-bottom: 16px; }
