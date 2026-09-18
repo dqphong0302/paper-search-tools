@@ -152,6 +152,26 @@ describe('default sources', () => {
     await click('#preset-custom');
     expect(activeSourceCount()).toBe(before);
   });
+
+  it('keeps distinct VJOL/SearXNG sources instead of substituting other connectors', async () => {
+    config({ domain_preset: 'custom', enabled_sources: 'vjol,searxng' });
+    await render(<SettingsPage port={8795} />);
+    expect(activeSourceCount()).toBe(2);
+    fetchMock.mockResolvedValueOnce(response({ success: true }));
+    await click('#save-settings');
+    const saved = JSON.parse(String(fetchMock.mock.lastCall?.[1]?.body));
+    expect(saved.enabled_sources).toBe('vjol,searxng');
+  });
+
+  it('drops obsolete unavailable source IDs loaded from an older configuration', async () => {
+    config({ domain_preset: 'custom', enabled_sources: 'openalex,papers_with_code,missing,openalex' });
+    await render(<SettingsPage port={8795} />);
+    expect(activeSourceCount()).toBe(1);
+    fetchMock.mockResolvedValueOnce(response({ success: true }));
+    await click('#save-settings');
+    const saved = JSON.parse(String(fetchMock.mock.lastCall?.[1]?.body));
+    expect(saved.enabled_sources).toBe('openalex');
+  });
 });
 
 describe('AI client setup', () => {
@@ -161,9 +181,9 @@ describe('AI client setup', () => {
     mcp_installed: false, mcp_managed: false, mcp_entry: null, mcp_error: null,
     skills_path: '/Users/me/.codex/skills',
     skills: [
-      { name: 'paper-search', source: 'builtin:paper-search', installed: false, managed: false, enabled: false },
-      { name: 'paper-collect', source: 'builtin:paper-collect', installed: false, managed: false, enabled: false },
-      { name: 'research-resume', source: 'builtin:research-resume', installed: false, managed: false, enabled: false },
+      { name: 'paper-search', source: 'builtin:paper-search', installed: false, managed: false, enabled: false, up_to_date: false },
+      { name: 'paper-collect', source: 'builtin:paper-collect', installed: false, managed: false, enabled: false, up_to_date: false },
+      { name: 'research-resume', source: 'builtin:research-resume', installed: false, managed: false, enabled: false, up_to_date: false },
     ],
     skills_error: null, note: 'Start a new Codex session after installing.', token_note: null,
     ...overrides,
@@ -176,12 +196,12 @@ describe('AI client setup', () => {
     vi.mocked(invoke).mockResolvedValueOnce([client()]).mockResolvedValueOnce(installed);
     await render(<AiClients />);
     expect(host.textContent).toContain('Codex');
-    expect(host.textContent).toContain('NOT CONNECTED');
+    expect(host.textContent).toContain('NOT CONFIGURED');
     expect(host.textContent).toContain('/Users/me/.codex/config.toml');
 
-    await click('#ai-client-codex-install-mcp');
-    expect(invoke).toHaveBeenLastCalledWith('setup_ai_client', { client: 'codex', action: 'install_mcp' });
-    expect(host.textContent).toContain('CONNECTED');
+    await click('#ai-client-codex-install-all');
+    expect(invoke).toHaveBeenLastCalledWith('setup_ai_client', { client: 'codex', action: 'install_all' });
+    expect(host.textContent).toContain('CONFIGURED');
     expect(host.textContent).toContain('Start a new Codex session');
   });
 
@@ -191,7 +211,7 @@ describe('AI client setup', () => {
       client({ mcp_installed: true, mcp_managed: false, mcp_entry: 'my-own-gateway' }),
     ]);
     await render(<AiClients />);
-    expect(host.querySelector<HTMLButtonElement>('#ai-client-codex-install-mcp')!.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('#ai-client-codex-install-all')!.disabled).toBe(true);
     expect(host.querySelector('#ai-client-codex-remove-mcp')).toBeNull();
     expect(host.textContent).toContain('my-own-gateway');
   });
@@ -201,6 +221,96 @@ describe('AI client setup', () => {
     vi.mocked(invoke).mockResolvedValueOnce([client({ detected: false })]);
     await render(<AiClients />);
     expect(host.textContent).toContain('NOT INSTALLED');
-    expect(host.querySelector('#ai-client-codex-install-mcp')).toBeNull();
+    expect(host.querySelector('#ai-client-codex-install-all')).toBeNull();
+  });
+
+  it('offers an update when a managed bundled skill is stale', async () => {
+    vi.mocked(isTauri).mockReturnValue(true);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const staleSkills = client().skills.map((skill, index) => ({
+      ...skill, installed: true, managed: true, enabled: true, up_to_date: index !== 0,
+    }));
+    const before = client({ skills: staleSkills });
+    const after = client({ skills: staleSkills.map((skill) => ({ ...skill, up_to_date: true })) });
+    vi.mocked(invoke).mockResolvedValueOnce([before]).mockResolvedValueOnce(after);
+    await render(<AiClients />);
+    expect(host.textContent).toContain('paper-search · update');
+    expect(host.textContent).toContain('Install MCP + skills');
+    await click('#ai-client-codex-install-all');
+    expect(invoke).toHaveBeenLastCalledWith('setup_ai_client', { client: 'codex', action: 'install_all' });
+  });
+});
+
+describe('connection settings', () => {
+  it('replaces a newly saved secret with the write-only sentinel in the form', async () => {
+    config();
+    await render(<SettingsPage port={8795} />);
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
+    await act(async () => { tabs.find((button) => button.textContent?.includes('Connections & Keys'))!.click(); });
+    await type('#setting-openai_api_key', 'sk-new-secret');
+    fetchMock.mockResolvedValueOnce(response({ success: true }));
+    await click('#save-settings');
+    expect(host.querySelector<HTMLInputElement>('#setting-openai_api_key')?.value).toBe('__SG_KEEP__');
+    expect(host.textContent).toContain('Saved securely');
+  });
+
+  it('keeps every catalog credential in the controlled save payload', async () => {
+    config();
+    await render(<SettingsPage port={8795} />);
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
+    await act(async () => { tabs.find((button) => button.textContent?.includes('Connections & Keys'))!.click(); });
+
+    for (const key of new Set(searchCatalog.sources.flatMap((source) => source.credentials))) {
+      expect(host.querySelector(`#setting-${key}`), `missing controlled field for ${key}`).not.toBeNull();
+    }
+
+    fetchMock.mockResolvedValueOnce(response({ success: true }));
+    await click('#save-settings');
+    const saved = JSON.parse(String(fetchMock.mock.lastCall?.[1]?.body));
+    expect(saved.core_api_key).toBe('');
+  });
+
+  it('exposes Groq and tests its saved key through the gateway', async () => {
+    config({ groq_api_key: '__SG_KEEP__' });
+    await render(<SettingsPage port={8795} />);
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
+    await act(async () => { tabs.find((button) => button.textContent?.includes('Connections & Keys'))!.click(); });
+    expect(host.textContent).toContain('Groq');
+    const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.textContent?.trim() === 'Test');
+    const groqButton = buttons[buttons.length - 1]!;
+    fetchMock.mockResolvedValueOnce(response({ success: true, message: 'Groq API key verified successfully!', latency_ms: 20 }));
+    await act(async () => { groqButton.click(); });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/test-llm', expect.objectContaining({ method: 'POST' }));
+    expect(JSON.parse(String(fetchMock.mock.lastCall?.[1]?.body)).provider).toBe('groq');
+  });
+
+  it('tests the dedicated web-search URL before saving', async () => {
+    config({ web_search_url: 'http://localhost:8080' });
+    await render(<SettingsPage port={8795} />);
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
+    await act(async () => { tabs.find((button) => button.textContent?.includes('Gateway & Security'))!.click(); });
+    fetchMock.mockResolvedValueOnce(response({ success: true, message: 'Connected', latency_ms: 12 }));
+    await click('#test-web-search');
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/test-searxng', expect.objectContaining({ method: 'POST' }));
+    expect(JSON.parse(String(fetchMock.mock.lastCall?.[1]?.body))).toEqual({
+      url: 'http://localhost:8080', categories: 'general', engines: '',
+    });
+  });
+
+  it('saves search pacing and the write-only outbound proxy setting', async () => {
+    config({ search_delay_ms: '2500', proxy_enabled: 'false', proxy_url: '' });
+    await render(<SettingsPage port={8795} />);
+    const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
+    await act(async () => { tabs.find((button) => button.textContent?.includes('Gateway & Security'))!.click(); });
+    expect(host.querySelector<HTMLInputElement>('#search-delay-ms')?.value).toBe('2500');
+    await act(async () => { host.querySelector<HTMLInputElement>('#proxy-enabled')!.click(); });
+    await type('#setting-proxy_url', 'http://user:pass@127.0.0.1:8080');
+    fetchMock.mockResolvedValueOnce(response({ success: true }));
+    await click('#save-settings');
+    const saved = JSON.parse(String(fetchMock.mock.lastCall?.[1]?.body));
+    expect(saved.search_delay_ms).toBe('2500');
+    expect(saved.proxy_enabled).toBe('true');
+    expect(saved.proxy_url).toBe('http://user:pass@127.0.0.1:8080');
+    expect(host.querySelector<HTMLInputElement>('#setting-proxy_url')?.value).toBe('__SG_KEEP__');
   });
 });

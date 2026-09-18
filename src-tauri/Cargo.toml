@@ -30,5 +30,15 @@ urlencoding = "2.1"
 quick-xml = "0.42"
 regex = "1"
 toml_edit = "0.25"
+rfd = "0.15"
 
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+
+# Desktop builds ship this binary to users, so trade compile time for size and
+# speed. `panic = "abort"` is deliberately left off: the gateway catches panics
+# per request rather than taking the whole app down with it.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3

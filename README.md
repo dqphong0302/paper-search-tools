@@ -98,12 +98,13 @@ When a **gateway token** is set, every route (`/api/*`, `/mcp`, `/sse`, `/messag
 - SQLite files and the data directory are `0600`/`0700` (Unix). The gateway binds loopback only and rejects non-loopback Origin/Host headers and DNS rebinding.
 
 ### MCP
-Streamable HTTP endpoint: `http://127.0.0.1:8795/mcp` (add the header only if a token is set):
+Streamable HTTP endpoint: `http://127.0.0.1:8795/mcp` (add the header only if a token is set). Claude Code requires the explicit HTTP transport:
 
 ```json
 {
   "mcpServers": {
     "scholargateway": {
+      "type": "http",
       "url": "http://127.0.0.1:8795/mcp",
       "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN>" }
     }
@@ -111,7 +112,7 @@ Streamable HTTP endpoint: `http://127.0.0.1:8795/mcp` (add the header only if a 
 }
 ```
 
-Legacy SSE clients use `/sse` (JSON-RPC results are returned on the right session stream). Drop `headers` when no token is set.
+Codex uses `[mcp_servers.scholargateway]` with the same `/mcp` URL and `bearer_token_env_var = "SCHOLARGATEWAY_TOKEN"`. Antigravity uses its documented SSE shape instead: `{ "serverUrl": "http://127.0.0.1:8795/sse" }`. Drop `headers` when no token is set.
 
 **The 8 MCP tools:**
 

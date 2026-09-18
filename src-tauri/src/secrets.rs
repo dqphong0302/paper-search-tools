@@ -43,7 +43,9 @@ pub fn write(key: &str, value: &str) -> bool {
     if !enabled() {
         return false;
     }
-    let stored = entry(key).map(|entry| entry.set_password(value).is_ok()).unwrap_or(false);
+    let stored = entry(key)
+        .map(|entry| entry.set_password(value).is_ok())
+        .unwrap_or(false);
     if stored {
         if let Ok(mut cache) = cache().lock() {
             cache.insert(key.to_string(), Some(value.to_string()));

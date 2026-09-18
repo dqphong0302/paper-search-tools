@@ -8,9 +8,8 @@ static ITEM_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)<a[^>]+href=["']((?:https://sti\.vista\.gov\.vn)?/publication/view/([^"']+?)-(\d+)\.html)["'][^>]*>([\s\S]*?)</a>"#).unwrap()
 });
 
-static YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"-(19\d\d|20\d\d)(?:-|$)"#).unwrap()
-});
+static YEAR_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"-(19\d\d|20\d\d)(?:-|$)"#).unwrap());
 
 pub async fn search_nasati(
     client: &reqwest::Client,
@@ -90,7 +89,9 @@ pub async fn search_nasati(
             title,
             authors: Vec::new(),
             year,
-            venue: Some("National Agency for Science and Technology Information (NASATI)".to_string()),
+            venue: Some(
+                "National Agency for Science and Technology Information (NASATI)".to_string(),
+            ),
             abstract_text: None,
             doi: None,
             source_url: Some(full_url),

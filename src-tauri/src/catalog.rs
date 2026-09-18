@@ -31,8 +31,10 @@ pub struct Catalog {
 
 pub fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
-    CATALOG.get_or_init(|| serde_json::from_str(include_str!("../../src/lib/searchCatalog.json"))
-        .expect("bundled search catalog must be valid"))
+    CATALOG.get_or_init(|| {
+        serde_json::from_str(include_str!("../../src/lib/searchCatalog.json"))
+            .expect("bundled search catalog must be valid")
+    })
 }
 
 #[cfg(test)]
@@ -52,8 +54,14 @@ mod tests {
                     .sources
                     .iter()
                     .find(|source| &source.id == id)
-                    .unwrap_or_else(|| panic!("preset {} references unknown source {}", preset.id, id));
-                assert!(source.available, "preset {} references unavailable source {}", preset.id, id);
+                    .unwrap_or_else(|| {
+                        panic!("preset {} references unknown source {}", preset.id, id)
+                    });
+                assert!(
+                    source.available,
+                    "preset {} references unavailable source {}",
+                    preset.id, id
+                );
             }
         }
     }

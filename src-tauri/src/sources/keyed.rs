@@ -10,7 +10,10 @@ pub async fn search_scopus(
     api_key: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(key) = api_key else {
-        return Err(format!("{}scopus: requires SCOPUS_API_KEY", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}scopus: requires SCOPUS_API_KEY",
+            crate::sources::NEEDS_SETUP
+        ));
     };
 
     let url = format!(
@@ -26,7 +29,12 @@ pub async fn search_scopus(
         .header("User-Agent", "ScholarGateway-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("scopus: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "scopus: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(crate::sources::keyed_http_error("scopus", res.status()));
@@ -49,12 +57,21 @@ pub async fn search_scopus(
                 break;
             }
 
-            let title = entry.get("dc:title").and_then(|v| v.as_str()).unwrap_or("(untitled)");
+            let title = entry
+                .get("dc:title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("(untitled)");
             let creator = entry.get("dc:creator").and_then(|v| v.as_str());
             let authors = creator.map(|c| vec![c.to_string()]).unwrap_or_default();
 
-            let venue = entry.get("prism:publicationName").and_then(|v| v.as_str()).unwrap_or("Scopus");
-            let doi = entry.get("prism:doi").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let venue = entry
+                .get("prism:publicationName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Scopus");
+            let doi = entry
+                .get("prism:doi")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
 
             let year = entry
                 .get("prism:coverDate")
@@ -79,7 +96,10 @@ pub async fn search_scopus(
                     entry
                         .get("link")
                         .and_then(|l| l.as_array())
-                        .and_then(|arr| arr.iter().find(|x| x.get("@ref").and_then(|r| r.as_str()) == Some("scopus")))
+                        .and_then(|arr| {
+                            arr.iter()
+                                .find(|x| x.get("@ref").and_then(|r| r.as_str()) == Some("scopus"))
+                        })
                         .and_then(|l| l.get("@href"))
                         .and_then(|h| h.as_str())
                         .map(|s| s.to_string())
@@ -115,7 +135,10 @@ pub async fn search_ieee(
     api_key: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(key) = api_key else {
-        return Err(format!("{}ieee: requires IEEE_API_KEY", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}ieee: requires IEEE_API_KEY",
+            crate::sources::NEEDS_SETUP
+        ));
     };
 
     let url = format!(
@@ -131,7 +154,12 @@ pub async fn search_ieee(
         .header("User-Agent", "ScholarGateway-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("ieee: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "ieee: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(crate::sources::keyed_http_error("ieee", res.status()));
@@ -151,8 +179,14 @@ pub async fn search_ieee(
                 break;
             }
 
-            let title = art.get("title").and_then(|t| t.as_str()).unwrap_or("(untitled)");
-            let venue = art.get("publication_title").and_then(|v| v.as_str()).unwrap_or("IEEE");
+            let title = art
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("(untitled)");
+            let venue = art
+                .get("publication_title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("IEEE");
 
             let authors = art
                 .get("authors")
@@ -166,18 +200,33 @@ pub async fn search_ieee(
                 })
                 .unwrap_or_default();
 
-            let year = art
-                .get("publication_year")
-                .and_then(|y| y.as_u64().map(|u| u as u32).or_else(|| y.as_str().and_then(|s| s.parse::<u32>().ok())));
+            let year = art.get("publication_year").and_then(|y| {
+                y.as_u64()
+                    .map(|u| u as u32)
+                    .or_else(|| y.as_str().and_then(|s| s.parse::<u32>().ok()))
+            });
 
-            let doi = art.get("doi").and_then(|d| d.as_str()).map(|s| s.to_string());
-            let citations = art.get("citing_paper_count").and_then(|c| c.as_u64()).map(|u| u as u32);
-            let art_num = art.get("article_number").and_then(|n| n.as_str()).unwrap_or("unknown");
+            let doi = art
+                .get("doi")
+                .and_then(|d| d.as_str())
+                .map(|s| s.to_string());
+            let citations = art
+                .get("citing_paper_count")
+                .and_then(|c| c.as_u64())
+                .map(|u| u as u32);
+            let art_num = art
+                .get("article_number")
+                .and_then(|n| n.as_str())
+                .unwrap_or("unknown");
 
             let source_url = doi
                 .as_ref()
                 .map(|d| format!("https://doi.org/{}", d))
-                .or_else(|| art.get("pdf_url").and_then(|u| u.as_str()).map(|s| s.to_string()))
+                .or_else(|| {
+                    art.get("pdf_url")
+                        .and_then(|u| u.as_str())
+                        .map(|s| s.to_string())
+                })
                 .or_else(|| Some(format!("https://ieeexplore.ieee.org/document/{}", art_num)));
 
             papers.push(Paper {
@@ -186,10 +235,16 @@ pub async fn search_ieee(
                 authors,
                 year,
                 venue: Some(venue.to_string()),
-                abstract_text: art.get("abstract").and_then(|a| a.as_str()).map(clean_html_text),
+                abstract_text: art
+                    .get("abstract")
+                    .and_then(|a| a.as_str())
+                    .map(clean_html_text),
                 doi,
                 source_url,
-                pdf_url: art.get("pdf_url").and_then(|u| u.as_str()).map(|s| s.to_string()),
+                pdf_url: art
+                    .get("pdf_url")
+                    .and_then(|u| u.as_str())
+                    .map(|s| s.to_string()),
                 citations,
                 quartile: None,
                 source: "ieee".to_string(),
@@ -210,7 +265,10 @@ pub async fn search_springer(
     api_key: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(key) = api_key else {
-        return Err(format!("{}springer: requires SPRINGER_API_KEY", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}springer: requires SPRINGER_API_KEY",
+            crate::sources::NEEDS_SETUP
+        ));
     };
 
     let url = format!(
@@ -226,7 +284,12 @@ pub async fn search_springer(
         .header("User-Agent", "ScholarGateway-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("springer: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "springer: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(crate::sources::keyed_http_error("springer", res.status()));
@@ -246,9 +309,18 @@ pub async fn search_springer(
                 break;
             }
 
-            let title = rec.get("title").and_then(|t| t.as_str()).unwrap_or("(untitled)");
-            let venue = rec.get("publicationName").and_then(|v| v.as_str()).unwrap_or("Springer");
-            let doi = rec.get("doi").and_then(|d| d.as_str()).map(|s| s.to_string());
+            let title = rec
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("(untitled)");
+            let venue = rec
+                .get("publicationName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Springer");
+            let doi = rec
+                .get("doi")
+                .and_then(|d| d.as_str())
+                .map(|s| s.to_string());
 
             let authors = rec
                 .get("creators")
@@ -285,7 +357,10 @@ pub async fn search_springer(
                 authors,
                 year,
                 venue: Some(venue.to_string()),
-                abstract_text: rec.get("abstract").and_then(|a| a.as_str()).map(clean_html_text),
+                abstract_text: rec
+                    .get("abstract")
+                    .and_then(|a| a.as_str())
+                    .map(clean_html_text),
                 doi,
                 source_url,
                 pdf_url: None,
@@ -309,7 +384,10 @@ pub async fn search_core(
     api_key: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(key) = api_key.filter(|key| !key.trim().is_empty()) else {
-        return Err(format!("{}core: requires CORE_API_KEY", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}core: requires CORE_API_KEY",
+            crate::sources::NEEDS_SETUP
+        ));
     };
     let url = format!(
         "https://api.core.ac.uk/v3/search/works?q={}&limit={}",
@@ -322,15 +400,27 @@ pub async fn search_core(
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|e| format!("core: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "core: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
     if !res.status().is_success() {
         return Err(crate::sources::keyed_http_error("core", res.status()));
     }
-    let val: Value = res.json().await.map_err(|e| format!("core: json parse failed: {}", e))?;
+    let val: Value = res
+        .json()
+        .await
+        .map_err(|e| format!("core: json parse failed: {}", e))?;
     let mut papers = Vec::new();
     if let Some(items) = val.get("results").and_then(Value::as_array) {
         for item in items.iter().take(limit) {
-            let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = item
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
             let authors = item
@@ -345,15 +435,32 @@ pub async fn search_core(
                 })
                 .unwrap_or_default();
             let doi = item.get("doi").and_then(Value::as_str).map(str::to_string);
-            let download = item.get("downloadUrl").and_then(Value::as_str).map(str::to_string).filter(|u| u.to_lowercase().ends_with(".pdf"));
-            let id = item.get("id").map(|v| v.to_string()).unwrap_or_else(|| title.to_string());
+            let download = item
+                .get("downloadUrl")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .filter(|u| u.to_lowercase().ends_with(".pdf"));
+            let id = item
+                .get("id")
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| title.to_string());
             papers.push(Paper {
                 id: format!("core:{id}"),
                 title: clean_html_text(title),
                 authors,
-                year: item.get("yearPublished").and_then(Value::as_u64).map(|y| y as u32),
-                venue: item.get("publisher").and_then(Value::as_str).map(str::to_string),
-                abstract_text: item.get("abstract").and_then(Value::as_str).map(clean_html_text).filter(|t| !t.is_empty()),
+                year: item
+                    .get("yearPublished")
+                    .and_then(Value::as_u64)
+                    .map(|y| y as u32),
+                venue: item
+                    .get("publisher")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                abstract_text: item
+                    .get("abstract")
+                    .and_then(Value::as_str)
+                    .map(clean_html_text)
+                    .filter(|t| !t.is_empty()),
                 source_url: doi.as_ref().map(|d| format!("https://doi.org/{}", d)),
                 doi,
                 pdf_url: download,
@@ -376,7 +483,10 @@ pub async fn search_dimensions(
     api_key: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(key) = api_key.filter(|key| !key.trim().is_empty()) else {
-        return Err(format!("{}dimensions: requires DIMENSIONS_API_KEY", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}dimensions: requires DIMENSIONS_API_KEY",
+            crate::sources::NEEDS_SETUP
+        ));
     };
     let url = format!(
         "https://api.dimensions.ai/details/publications?search_mode=content&search_text={}&search_type=kws&return_type=publications&per_page={}",
@@ -389,15 +499,27 @@ pub async fn search_dimensions(
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|e| format!("dimensions: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "dimensions: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
     if !res.status().is_success() {
         return Err(crate::sources::keyed_http_error("dimensions", res.status()));
     }
-    let val: Value = res.json().await.map_err(|e| format!("dimensions: json parse failed: {}", e))?;
+    let val: Value = res
+        .json()
+        .await
+        .map_err(|e| format!("dimensions: json parse failed: {}", e))?;
     let mut papers = Vec::new();
     if let Some(items) = val.get("publications").and_then(Value::as_array) {
         for item in items.iter().take(limit) {
-            let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = item
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
             let authors = item
@@ -416,7 +538,10 @@ pub async fn search_dimensions(
                 })
                 .unwrap_or_default();
             let doi = item.get("doi").and_then(Value::as_str).map(str::to_string);
-            let id = item.get("id").map(|v| v.to_string()).unwrap_or_else(|| title.to_string());
+            let id = item
+                .get("id")
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| title.to_string());
             papers.push(Paper {
                 id: format!("dimensions:{id}"),
                 title: clean_html_text(title),
@@ -427,11 +552,18 @@ pub async fn search_dimensions(
                     .and_then(|j| j.get("title"))
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                abstract_text: item.get("abstract").and_then(Value::as_str).map(clean_html_text).filter(|t| !t.is_empty()),
+                abstract_text: item
+                    .get("abstract")
+                    .and_then(Value::as_str)
+                    .map(clean_html_text)
+                    .filter(|t| !t.is_empty()),
                 source_url: doi.as_ref().map(|d| format!("https://doi.org/{}", d)),
                 doi,
                 pdf_url: None,
-                citations: item.get("times_cited").and_then(Value::as_u64).map(|c| c as u32),
+                citations: item
+                    .get("times_cited")
+                    .and_then(Value::as_u64)
+                    .map(|c| c as u32),
                 quartile: None,
                 source: "Dimensions".to_string(),
                 score: None,
@@ -450,7 +582,10 @@ pub async fn search_web_of_science(
     api_key: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(key) = api_key.filter(|key| !key.trim().is_empty()) else {
-        return Err(format!("{}web_of_science: requires WOS_API_KEY", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}web_of_science: requires WOS_API_KEY",
+            crate::sources::NEEDS_SETUP
+        ));
     };
     let url = format!(
         "https://api.clarivate.com/apis/wos-starter/v1/documents?q=TS%3D({})&db=WOS&limit={}",
@@ -463,15 +598,30 @@ pub async fn search_web_of_science(
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|e| format!("web_of_science: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "web_of_science: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
     if !res.status().is_success() {
-        return Err(crate::sources::keyed_http_error("web_of_science", res.status()));
+        return Err(crate::sources::keyed_http_error(
+            "web_of_science",
+            res.status(),
+        ));
     }
-    let val: Value = res.json().await.map_err(|e| format!("web_of_science: json parse failed: {}", e))?;
+    let val: Value = res
+        .json()
+        .await
+        .map_err(|e| format!("web_of_science: json parse failed: {}", e))?;
     let mut papers = Vec::new();
     if let Some(items) = val.get("hits").and_then(Value::as_array) {
         for item in items.iter().take(limit) {
-            let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = item
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
             let authors = item
@@ -495,7 +645,12 @@ pub async fn search_web_of_science(
             let source_url = doi
                 .as_ref()
                 .map(|d| format!("https://doi.org/{}", d))
-                .or_else(|| Some(format!("https://www.webofscience.com/wos/woscc/full-record/{}", uid)));
+                .or_else(|| {
+                    Some(format!(
+                        "https://www.webofscience.com/wos/woscc/full-record/{}",
+                        uid
+                    ))
+                });
             papers.push(Paper {
                 id: format!("wos:{}", uid),
                 title: clean_html_text(title),
@@ -511,11 +666,19 @@ pub async fn search_web_of_science(
                     .and_then(|s| s.get("sourceTitle"))
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                abstract_text: item.get("abstract").and_then(Value::as_str).map(clean_html_text).filter(|t| !t.is_empty()),
+                abstract_text: item
+                    .get("abstract")
+                    .and_then(Value::as_str)
+                    .map(clean_html_text)
+                    .filter(|t| !t.is_empty()),
                 doi,
                 source_url,
                 pdf_url: None,
-                citations: item.get("citations").and_then(|c| c.get("count")).and_then(Value::as_u64).map(|c| c as u32),
+                citations: item
+                    .get("citations")
+                    .and_then(|c| c.get("count"))
+                    .and_then(Value::as_u64)
+                    .map(|c| c as u32),
                 quartile: None,
                 source: "Web of Science".to_string(),
                 score: None,

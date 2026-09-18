@@ -150,7 +150,10 @@ pub async fn lookup(state: &AppState, id: &str) -> Result<Paper, (u16, String)> 
         .map_err(|_| (502, "Crossref did not return valid JSON".into()))?;
     let paper = crossref_paper(&value["message"]).map_err(|error| (502, error))?;
     if paper.doi.as_deref() != Some(doi.as_str()) {
-        return Err((502, "Crossref returned a DOI that does not match the request".into()));
+        return Err((
+            502,
+            "Crossref returned a DOI that does not match the request".into(),
+        ));
     }
     Ok(paper)
 }
@@ -163,7 +166,12 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires live Crossref network access"]
     async fn live_crossref_exact_doi() {
-        let state = AppState { db: crate::db::Database::in_memory().unwrap(), engine: std::sync::Arc::new(crate::engine::AcademicEngine::new()), port: 0, mcp_sessions: Default::default() };
+        let state = AppState {
+            db: crate::db::Database::in_memory().unwrap(),
+            engine: std::sync::Arc::new(crate::engine::AcademicEngine::new()),
+            port: 0,
+            mcp_sessions: Default::default(),
+        };
         let paper = lookup(&state, "10.1038/nature14539").await.unwrap();
         assert_eq!(paper.doi.as_deref(), Some("10.1038/nature14539"));
         assert_eq!(paper.title.to_lowercase(), "deep learning");

@@ -245,6 +245,14 @@
       "available": true
     },
     {
+      "id": "doab",
+      "name": "DOAB",
+      "group": "Data Repositories & Open Access",
+      "desc": "Directory of Open Access Books — driver implemented but not enabled in this build",
+      "credentials": [],
+      "available": false
+    },
+    {
       "id": "hal",
       "name": "HAL Open Science",
       "group": "Economics & Social Sciences",
@@ -376,9 +384,9 @@
       "id": "inspire_hep",
       "name": "INSPIRE-HEP",
       "group": "Physics & Natural Sciences",
-      "desc": "High energy and nuclear physics (CERN, DESY, SLAC)",
+      "desc": "High energy and nuclear physics — upstream API is unreachable from the app",
       "credentials": [],
-      "available": true
+      "available": false
     },
     {
       "id": "datacite",
@@ -424,9 +432,9 @@
       "id": "ntrs",
       "name": "NASA NTRS",
       "group": "Physics & Natural Sciences",
-      "desc": "NASA aerospace and mechanical engineering technical reports",
+      "desc": "NASA aerospace reports — search API currently returns HTTP 503",
       "credentials": [],
-      "available": true
+      "available": false
     },
     {
       "id": "dryad",
@@ -496,9 +504,9 @@
       "id": "sljol",
       "name": "SLJOL",
       "group": "Regional & Global South",
-      "desc": "Sri Lanka journals online",
+      "desc": "Sri Lanka journals online — blocks non-browser requests with HTTP 403",
       "credentials": [],
-      "available": true
+      "available": false
     },
     {
       "id": "lamjol",
@@ -559,9 +567,9 @@
   ],
   "presets": [
     {
-      "id": "vietnam_academic",
-      "label": "🇻🇳 Vietnamese Scholarship (Comprehensive)",
-      "description": "VJOL, VAST, JST HUST, VNU Journals, VISTA NASATI (+6 more)",
+      "id": "vietnam",
+      "label": "🇻🇳 Vietnamese Research & Journals",
+      "description": "VJOL, VAST, JST HUST, VNU Journals, VISTA NASATI, HMU Medical Research, OpenAlex Vietnam",
       "sources": [
         "vjol",
         "vast",
@@ -569,235 +577,34 @@
         "vnu_js",
         "vista_nasati",
         "tapchi_nghiencuuyhoc",
-        "openalex",
-        "searxng",
-        "perplexity"
+        "vietnam"
       ],
-      "query": "phát triển kinh tế bền vững việt nam"
-    },
-    {
-      "id": "vietnam_medical",
-      "label": "🇻🇳 Vietnam Medicine & Pharmacy",
-      "description": "VJOL, Ho Chi Minh City Journal of Medicine, Journal of Medical Research (HMU), MedPharmRes, VISTA NASATI (+3 more)",
-      "sources": [
-        "vjol",
-        "tapchi_nghiencuuyhoc",
-        "vista_nasati",
-        "pubmed",
-        "openalex",
-        "perplexity"
-      ],
-      "query": "điều trị đái tháo đường típ 2"
-    },
-    {
-      "id": "vietnam_science",
-      "label": "🇻🇳 Vietnam Natural Sciences",
-      "description": "VJOL, VAST, JST HUST, VNU Journals, VISTA NASATI (+3 more)",
-      "sources": [
-        "vjol",
-        "vast",
-        "jst_hust",
-        "vnu_js",
-        "vista_nasati",
-        "openalex",
-        "searxng",
-        "perplexity"
-      ],
-      "query": "vật liệu nano composite"
-    },
-    {
-      "id": "vietnam_engineering",
-      "label": "🇻🇳 Vietnam Engineering & Technology",
-      "description": "JST HUST, VAST, VJOL, VISTA NASATI, OpenAlex",
-      "sources": [
-        "jst_hust",
-        "vast",
-        "vjol",
-        "vista_nasati",
-        "openalex"
-      ],
-      "query": "robot tự hành điều khiển thông minh"
-    },
-    {
-      "id": "vietnam_agriculture",
-      "label": "🇻🇳 Vietnam Agriculture, Forestry & Fisheries",
-      "description": "VJOL, VISTA NASATI, DOAJ, OpenAlex, SearXNG",
-      "sources": [
-        "vjol",
-        "vista_nasati",
-        "doaj",
-        "openalex",
-        "searxng"
-      ],
-      "query": "biến đổi khí hậu đồng bằng sông cửu long"
-    },
-    {
-      "id": "vietnam_economics",
-      "label": "🇻🇳 Vietnam Economics & Management",
-      "description": "VJOL, VISTA NASATI, EconBiz, DOAJ, OpenAlex (+1 more)",
-      "sources": [
-        "vjol",
-        "vista_nasati",
-        "econbiz",
-        "doaj",
-        "openalex",
-        "searxng"
-      ],
-      "query": "chuyển đổi số doanh nghiệp việt nam"
-    },
-    {
-      "id": "vietnam_education",
-      "label": "🇻🇳 Vietnam Education & Pedagogy",
-      "description": "VJOL, VISTA NASATI, ERIC, DOAJ, OpenAlex (+1 more)",
-      "sources": [
-        "vjol",
-        "vista_nasati",
-        "eric",
-        "doaj",
-        "openalex",
-        "searxng"
-      ],
-      "query": "đổi mới phương pháp dạy học đại học"
-    },
-    {
-      "id": "vietnam_social",
-      "label": "🇻🇳 Vietnam Social Sciences & Humanities",
-      "description": "VJOL, VNU Journals, VISTA NASATI, DOAJ, OpenAlex (+2 more)",
-      "sources": [
-        "vjol",
-        "vnu_js",
-        "vista_nasati",
-        "doaj",
-        "openalex",
-        "searxng",
-        "hal"
-      ],
-      "query": "bảo tồn di sản văn hóa việt nam"
+      "query": "chuyển đổi số giáo dục đại học việt nam"
     },
     {
       "id": "biomedical",
-      "label": "International Biomedicine",
-      "description": "PubMed / MEDLINE, Europe PMC (MetaSearch), OpenAlex, Semantic Scholar, bioRxiv (+1 more)",
+      "label": "🧬 Biomedical, Clinical & Life Sciences",
+      "description": "PubMed / MEDLINE, Europe PMC, PMC, PLOS, ClinicalTrials, medRxiv, bioRxiv, OpenFDA, UniProt, ClinVar, NCBI GEO",
       "sources": [
         "pubmed",
-        "metasearch",
-        "openalex",
-        "semantic_scholar",
-        "biorxiv",
-        "europe_pmc"
-      ],
-      "query": "immunotherapy cancer checkpoint inhibitors"
-    },
-    {
-      "id": "biomedical_full",
-      "label": "Biomedicine (Full Coverage)",
-      "description": "PubMed / MEDLINE, PubMed Central (PMC), PLOS, ClinicalTrials.gov, medRxiv (+14 more)",
-      "sources": [
-        "pubmed",
+        "europe_pmc",
         "pmc",
         "plos",
         "clinicaltrials",
         "medrxiv",
-        "vjol",
-        "tapchi_nghiencuuyhoc",
-        "vista_nasati",
-        "metasearch",
-        "openalex",
-        "semantic_scholar",
         "biorxiv",
-        "crossref",
-        "doaj",
-        "searxng",
-        "perplexity",
-        "europe_pmc"
-      ],
-      "query": "type 2 diabetes GLP-1 receptor agonist"
-    },
-    {
-      "id": "clinical_trials",
-      "label": "Clinical Trials",
-      "description": "ClinicalTrials.gov, PubMed / MEDLINE, medRxiv, Europe PMC (MetaSearch), Europe PMC",
-      "sources": [
-        "clinicaltrials",
-        "pubmed",
-        "medrxiv",
-        "metasearch",
-        "europe_pmc"
-      ],
-      "query": "randomized controlled trial cardiovascular outcomes"
-    },
-    {
-      "id": "pharma_clinical",
-      "label": "Pharmacology & Drug Safety",
-      "description": "ClinicalTrials.gov, PubMed / MEDLINE, Europe PMC (MetaSearch), Europe PMC, OpenFDA (+1 more)",
-      "sources": [
-        "clinicaltrials",
-        "pubmed",
-        "metasearch",
-        "europe_pmc",
         "openfda",
-        "openevidence"
-      ],
-      "query": "drug adverse reactions safety monitoring"
-    },
-    {
-      "id": "pharma_deep",
-      "label": "Pharmacology In Depth",
-      "description": "ClinicalTrials.gov, PubMed / MEDLINE, Europe PMC (MetaSearch), Europe PMC, OpenFDA",
-      "sources": [
-        "clinicaltrials",
-        "pubmed",
-        "metasearch",
-        "europe_pmc",
-        "openfda"
-      ],
-      "query": "small molecule kinase inhibitors"
-    },
-    {
-      "id": "bioinformatics",
-      "label": "Bioinformatics & Protein Structure",
-      "description": "bioRxiv, PubMed / MEDLINE, UniProt, NCBI GEO, ClinVar",
-      "sources": [
-        "biorxiv",
-        "pubmed",
         "uniprot",
+        "clinvar",
         "ncbi_geo",
-        "clinvar"
+        "metasearch"
       ],
-      "query": "alphafold protein structure prediction"
+      "query": "cancer immunotherapy checkpoint inhibitors"
     },
     {
-      "id": "global_health",
-      "label": "Global Health",
-      "description": "PubMed / MEDLINE, medRxiv, Europe PMC (MetaSearch), OpenAlex, Europe PMC",
-      "sources": [
-        "pubmed",
-        "medrxiv",
-        "metasearch",
-        "openalex",
-        "europe_pmc"
-      ],
-      "query": "pandemic preparedness epidemiology"
-    },
-    {
-      "id": "fulltext_biomedical",
-      "label": "Biomedical Full Text",
-      "description": "PubMed Central (PMC), PLOS, Europe PMC (MetaSearch), bioRxiv, medRxiv (+2 more)",
-      "sources": [
-        "pmc",
-        "plos",
-        "metasearch",
-        "biorxiv",
-        "medrxiv",
-        "openalex",
-        "europe_pmc"
-      ],
-      "query": "microbiome gut brain axis mechanism"
-    },
-    {
-      "id": "cs_ai",
-      "label": "Computer Science & AI",
-      "description": "Semantic Scholar, OpenAlex, arXiv, DBLP, Papers With Code (+3 more)",
+      "id": "ai_cs",
+      "label": "🤖 AI, Computer Science & Cyber Security",
+      "description": "Semantic Scholar, OpenAlex, arXiv, DBLP, Hugging Face, OpenReview, HF Datasets, Dataverse, Zenodo, CVE NVD, CISA KEV, Stack Exchange",
       "sources": [
         "semantic_scholar",
         "openalex",
@@ -805,215 +612,119 @@
         "dblp",
         "huggingface",
         "openreview",
+        "hf_datasets",
+        "dataverse",
+        "zenodo",
+        "cve_nvd",
+        "cisa_kev",
+        "stackexchange",
         "searxng"
       ],
-      "query": "large language models reasoning evaluation"
+      "query": "retrieval augmented generation large language models"
     },
     {
-      "id": "ml_ai_deep",
-      "label": "Machine Learning & SOTA",
-      "description": "Papers With Code, Hugging Face Papers, OpenReview, arXiv, Semantic Scholar (+1 more)",
-      "sources": [
-        "huggingface",
-        "openreview",
-        "arxiv",
-        "semantic_scholar",
-        "dblp"
-      ],
-      "query": "diffusion models image generation"
-    },
-    {
-      "id": "nlp_llm",
-      "label": "Large Language Models (LLM)",
-      "description": "arXiv, Semantic Scholar, Papers With Code, OpenReview, Hugging Face Papers (+1 more)",
+      "id": "stem_nature",
+      "label": "🔬 STEM, Physics, Chemistry & Space",
+      "description": "arXiv, OpenAlex, Crossref, Zenodo, Dryad, IEEE, Springer, Scopus",
       "sources": [
         "arxiv",
-        "semantic_scholar",
-        "openreview",
-        "huggingface",
-        "dblp"
-      ],
-      "query": "retrieval augmented generation hallucination"
-    },
-    {
-      "id": "nlp_acl",
-      "label": "ACL / EMNLP / COLING Proceedings",
-      "description": "arXiv, OpenReview, Hugging Face Papers, Semantic Scholar",
-      "sources": [
-        "arxiv",
-        "openreview",
-        "huggingface",
-        "semantic_scholar"
-      ],
-      "query": "parameter efficient fine tuning LoRA"
-    },
-    {
-      "id": "cv_vision",
-      "label": "Computer Vision (CVPR/ICCV)",
-      "description": "arXiv, IEEE Xplore, Semantic Scholar, Papers With Code, OpenReview",
-      "sources": [
-        "arxiv",
-        "ieee",
-        "semantic_scholar",
-        "openreview"
-      ],
-      "query": "vision transformer object detection"
-    },
-    {
-      "id": "cyber_security",
-      "label": "Security & CVE",
-      "description": "arXiv, DBLP, SearXNG, NIST NVD (CVE), CISA KEV",
-      "sources": [
-        "arxiv",
-        "dblp",
-        "searxng",
-        "cve_nvd",
-        "cisa_kev"
-      ],
-      "query": "zero day vulnerability memory safety"
-    },
-    {
-      "id": "code_knowledge",
-      "label": "Software Architecture & Code",
-      "description": "Papers With Code, Hugging Face Papers, DBLP, Stack Exchange",
-      "sources": [
-        "huggingface",
-        "dblp",
-        "stackexchange"
-      ],
-      "query": "compiler optimization intermediate representation"
-    },
-    {
-      "id": "datasets",
-      "label": "Datasets & Benchmarks",
-      "description": "Zenodo, DataCite, Papers With Code, Dryad, Harvard Dataverse (+3 more)",
-      "sources": [
+        "openalex",
+        "crossref",
         "zenodo",
-        "datacite",
         "dryad",
-        "dataverse",
-        "hf_datasets",
-        "ncbi_geo",
-        "figshare"
-      ],
-      "query": "multimodal instruction tuning dataset"
-    },
-    {
-      "id": "physics",
-      "label": "Physics & Astronomy",
-      "description": "INSPIRE-HEP, arXiv, OpenAlex, Semantic Scholar",
-      "sources": [
-        "inspire_hep",
-        "arxiv",
-        "openalex",
-        "semantic_scholar"
-      ],
-      "query": "gravitational waves black hole mergers"
-    },
-    {
-      "id": "chemistry",
-      "label": "Chemistry & Materials",
-      "description": "Springer Nature, OpenAlex, Crossref",
-      "sources": [
+        "ieee",
         "springer",
-        "openalex",
-        "crossref"
+        "scopus"
       ],
-      "query": "battery electrolyte solid state"
+      "query": "solid state battery electrolyte materials"
     },
     {
-      "id": "energy_materials",
-      "label": "Energy & Nuclear",
-      "description": "arXiv, INSPIRE-HEP, OpenAlex, Crossref, DOAJ",
+      "id": "social_humanities",
+      "label": "📚 Economics, Social Sciences & Humanities",
+      "description": "EconBiz, World Bank OKR, SEC EDGAR, ERIC, HAL Open Science, OpenAlex, Crossref, DOAJ",
       "sources": [
-        "arxiv",
-        "inspire_hep",
+        "econbiz",
+        "world_bank",
+        "sec_edgar",
+        "eric",
+        "hal",
         "openalex",
         "crossref",
         "doaj"
       ],
-      "query": "perovskite solar cells efficiency"
+      "query": "monetary policy inflation central banking"
     },
     {
-      "id": "aerospace",
-      "label": "Aerospace & Aviation",
-      "description": "arXiv, OpenAlex, IEEE Xplore, NASA NTRS",
+      "id": "evidence_review",
+      "label": "📊 Evidence Review & Systematic Reviews",
+      "description": "ClinicalTrials.gov, PubMed Central (PMC), PubMed, Europe PMC, PLOS, OpenAlex, Consensus, OpenEvidence",
       "sources": [
-        "arxiv",
+        "clinicaltrials",
+        "pmc",
+        "pubmed",
+        "europe_pmc",
+        "plos",
         "openalex",
-        "ieee",
-        "ntrs"
+        "consensus",
+        "openevidence"
       ],
-      "query": "hypersonic propulsion aerodynamics"
+      "query": "systematic review meta-analysis effectiveness"
     },
     {
-      "id": "economics",
-      "label": "Economics & Finance",
-      "description": "EconBiz, OpenAlex, Crossref, DOAJ, SEC EDGAR",
+      "id": "patents_gov",
+      "label": "🏛️ Patents, Government & Policy Reports",
+      "description": "SEC EDGAR, World Bank OKR, OpenAlex, SearXNG",
       "sources": [
-        "econbiz",
+        "sec_edgar",
+        "world_bank",
         "openalex",
+        "searxng"
+      ],
+      "query": "critical mineral supply chain risk policy"
+    },
+    {
+      "id": "global_regional",
+      "label": "🌏 Regional, Asia-Pacific & Global South",
+      "description": "CiNii Research, ThaiJO, AJOL, BanglaJOL, NepJOL, MongoliaJOL, LAMJOL, VJOL",
+      "sources": [
+        "cinii",
+        "thaijo",
+        "ajol",
+        "banglajol",
+        "nepjol",
+        "mongoliajol",
+        "lamjol",
+        "vjol"
+      ],
+      "query": "tropical infectious disease control asia pacific"
+    },
+    {
+      "id": "auto",
+      "label": "⚡ Auto Discovery",
+      "description": "Automatically routes queries to relevant sources across disciplines",
+      "sources": [
+        "openalex",
+        "semantic_scholar",
         "crossref",
-        "doaj",
-        "sec_edgar"
-      ],
-      "query": "central bank digital currency inflation"
-    },
-    {
-      "id": "education",
-      "label": "Education & Pedagogy",
-      "description": "ERIC, DOAJ, OpenAlex",
-      "sources": [
-        "eric",
-        "doaj",
-        "openalex"
-      ],
-      "query": "artificial intelligence in personalized learning"
-    },
-    {
-      "id": "theses",
-      "label": "Doctoral Theses (PhD)",
-      "description": "OpenAlex, HAL Open Science, EconBiz",
-      "sources": [
-        "openalex",
-        "hal",
-        "econbiz"
-      ],
-      "query": "doctoral dissertation machine learning"
-    },
-    {
-      "id": "books",
-      "label": "Open Monographs",
-      "description": "OpenAlex, Crossref",
-      "sources": [
-        "openalex",
-        "crossref"
-      ],
-      "query": "open access academic monograph"
-    },
-    {
-      "id": "humanities",
-      "label": "Humanities & Social Sciences",
-      "description": "VJOL, HAL Open Science, DOAJ, OpenAlex, Crossref",
-      "sources": [
+        "pubmed",
+        "arxiv",
         "vjol",
-        "hal",
+        "vast",
+        "vista_nasati",
         "doaj",
-        "openalex",
-        "crossref"
+        "zenodo"
       ],
-      "query": "digital humanities cultural heritage"
+      "query": ""
     },
     {
       "id": "open_access",
-      "label": "100% Open Access (Free PDF)",
-      "description": "VJOL, VAST, DOAJ, OpenAlex, Europe PMC (MetaSearch) (+6 more)",
+      "label": "🔓 100% Free Open Access (Full-Text PDF)",
+      "description": "VJOL, VAST, DOAJ, OpenAlex, Zenodo, PLOS, PMC, OpenAIRE, CORE, Europe PMC",
       "sources": [
         "vjol",
         "vast",
         "doaj",
         "openalex",
-        "metasearch",
         "zenodo",
         "plos",
         "pmc",
@@ -1025,153 +736,20 @@
     },
     {
       "id": "preprints",
-      "label": "Latest Preprints",
-      "description": "arXiv, bioRxiv, medRxiv, Papers With Code, Hugging Face Papers",
+      "label": "📄 Latest Preprints & Early Papers",
+      "description": "arXiv, bioRxiv, medRxiv, Hugging Face Papers",
       "sources": [
         "arxiv",
         "biorxiv",
         "medrxiv",
         "huggingface"
       ],
-      "query": "foundation models multimodal"
-    },
-    {
-      "id": "reputable",
-      "label": "Indexed Journals (ISI / Scopus)",
-      "description": "Scopus, IEEE Xplore, Springer Nature, OpenAlex, Semantic Scholar (+2 more)",
-      "sources": [
-        "scopus",
-        "ieee",
-        "springer",
-        "openalex",
-        "semantic_scholar",
-        "dimensions",
-        "web_of_science"
-      ],
-      "query": "deep learning quantum computing"
-    },
-    {
-      "id": "patents",
-      "label": "Patents",
-      "description": "SearXNG, OpenAlex",
-      "sources": [
-        "searxng",
-        "openalex"
-      ],
-      "query": "solid state battery patent"
-    },
-    {
-      "id": "asia_pacific",
-      "label": "Asia - Pacific",
-      "description": "PhilJOL, NepJOL, BanglaJOL, SLJOL, MongoliaJOL (+7 more)",
-      "sources": [
-        "nepjol",
-        "banglajol",
-        "sljol",
-        "mongoliajol",
-        "vjol",
-        "vast",
-        "vnu_js",
-        "openalex",
-        "doaj",
-        "cinii",
-        "thaijo"
-      ],
-      "query": "tropical infectious diseases asia"
-    },
-    {
-      "id": "global_south",
-      "label": "Global South Network",
-      "description": "BanglaJOL, NepJOL, PhilJOL, SLJOL, LAMJOL (+6 more)",
-      "sources": [
-        "banglajol",
-        "nepjol",
-        "sljol",
-        "lamjol",
-        "mongoliajol",
-        "vjol",
-        "vnu_js",
-        "doaj",
-        "ajol",
-        "thaijo"
-      ],
-      "query": "indigenous knowledge climate resilience"
-    },
-    {
-      "id": "africa",
-      "label": "African Research",
-      "description": "DOAJ, OpenAlex, AJOL",
-      "sources": [
-        "doaj",
-        "openalex",
-        "ajol"
-      ],
-      "query": "public health interventions sub saharan africa"
-    },
-    {
-      "id": "us_gov",
-      "label": "Government & Grey Literature",
-      "description": "SEC EDGAR, NASA NTRS, World Bank OKR",
-      "sources": [
-        "sec_edgar",
-        "ntrs",
-        "world_bank"
-      ],
-      "query": "critical minerals supply chain security"
-    },
-    {
-      "id": "funding",
-      "label": "Funding & Aid Landscape",
-      "description": "OpenAlex",
-      "sources": [
-        "openalex"
-      ],
-      "query": "alzheimer disease grant funding"
-    },
-    {
-      "id": "systematic_review",
-      "label": "Systematic Reviews (PRISMA)",
-      "description": "ClinicalTrials.gov, PubMed Central (PMC), PubMed / MEDLINE, Europe PMC (MetaSearch), Europe PMC (+1 more)",
-      "sources": [
-        "clinicaltrials",
-        "pmc",
-        "pubmed",
-        "metasearch",
-        "europe_pmc",
-        "consensus"
-      ],
-      "query": "systematic review meta analysis efficacy"
-    },
-    {
-      "id": "evidence_based",
-      "label": "Evidence-Based Medicine (EBM)",
-      "description": "PubMed Central (PMC), ClinicalTrials.gov, Europe PMC (MetaSearch), Europe PMC, Consensus.app",
-      "sources": [
-        "pmc",
-        "clinicaltrials",
-        "metasearch",
-        "europe_pmc",
-        "consensus"
-      ],
-      "query": "acupuncture chronic low back pain evidence"
-    },
-    {
-      "id": "science_web",
-      "label": "Science Web & Grey Literature",
-      "description": "SearXNG, Perplexity, OpenAlex, arXiv, Semantic Scholar",
-      "sources": [
-        "searxng",
-        "perplexity",
-        "openalex",
-        "arxiv",
-        "semantic_scholar"
-      ],
-      "query": "open science standards technical report"
+      "query": "foundation models multimodal architectures"
     },
     {
       "id": "exhaustive",
-      "label": "All Sources (Exhaustive)",
-      "description": "OpenAlex, Semantic Scholar, arXiv, PubMed / MEDLINE, VJOL (+59 more)",
+      "label": "🌐 All Available Sources (Exhaustive RRF)",
+      "description": "Queries all available scholarly and academic databases combined via RRF",
       "sources": [
         "openalex",
         "semantic_scholar",
@@ -1182,14 +760,20 @@
         "jst_hust",
         "vista_nasati",
         "perplexity",
+        "consensus",
+        "openevidence",
         "crossref",
-        "metasearch",
+        "europe_pmc",
         "dblp",
+        "core",
         "doaj",
+        "openaire",
         "scopus",
         "ieee",
         "springer",
+        "dimensions",
         "biorxiv",
+        "web_of_science",
         "zenodo",
         "hal",
         "huggingface",
@@ -1197,245 +781,41 @@
         "searxng",
         "clinicaltrials",
         "medrxiv",
+        "openfda",
+        "cve_nvd",
+        "cisa_kev",
+        "uniprot",
+        "clinvar",
+        "hf_datasets",
+        "dataverse",
+        "stackexchange",
         "eric",
         "econbiz",
-        "inspire_hep",
         "datacite",
+        "figshare",
+        "world_bank",
         "pmc",
         "plos",
+        "dryad",
+        "ncbi_geo",
+        "sec_edgar",
+        "ajol",
         "banglajol",
         "nepjol",
         "mongoliajol",
-        "sljol",
         "lamjol",
+        "thaijo",
         "tapchi_nghiencuuyhoc",
         "vnu_js",
-        "vietnam",
         "cinii",
-        "dryad",
-        "dataverse",
-        "ntrs",
-        "world_bank",
-        "ajol",
-        "thaijo",
-        "openaire",
-        "core",
-        "dimensions",
-        "web_of_science",
-        "cve_nvd",
-        "hf_datasets",
-        "stackexchange",
-        "europe_pmc",
-        "openfda",
-        "uniprot",
-        "ncbi_geo",
-        "clinvar",
-        "figshare",
-        "sec_edgar",
-        "cisa_kev"
-      ],
-      "query": ""
-    },
-    {
-      "id": "engineering",
-      "label": "Engineering",
-      "description": "arXiv, OpenAlex, Crossref, Semantic Scholar",
-      "sources": [
-        "arxiv",
-        "openalex",
-        "crossref",
-        "semantic_scholar"
-      ],
-      "query": "renewable energy storage systems"
-    },
-    {
-      "id": "natural_sciences",
-      "label": "Natural Sciences",
-      "description": "arXiv, OpenAlex, Crossref, Semantic Scholar, Zenodo",
-      "sources": [
-        "arxiv",
-        "openalex",
-        "crossref",
-        "semantic_scholar",
-        "zenodo"
-      ],
-      "query": "quantum materials"
-    },
-    {
-      "id": "social_sciences",
-      "label": "Social Sciences",
-      "description": "OpenAlex, Crossref, DOAJ, HAL Open Science",
-      "sources": [
-        "openalex",
-        "crossref",
-        "doaj",
-        "hal"
-      ],
-      "query": "social inequality urban development"
-    },
-    {
-      "id": "law",
-      "label": "Law",
-      "description": "OpenAlex, Crossref, DOAJ, HAL Open Science",
-      "sources": [
-        "openalex",
-        "crossref",
-        "doaj",
-        "hal"
-      ],
-      "query": "data protection comparative law"
-    },
-    {
-      "id": "environment",
-      "label": "Environment",
-      "description": "OpenAlex, Crossref, DOAJ, HAL Open Science",
-      "sources": [
-        "openalex",
-        "crossref",
-        "doaj",
-        "hal"
-      ],
-      "query": "climate adaptation biodiversity"
-    },
-    {
-      "id": "agriculture",
-      "label": "Agriculture",
-      "description": "DOAJ, OpenAlex, SearXNG",
-      "sources": [
-        "doaj",
-        "openalex",
-        "searxng"
-      ],
-      "query": "sustainable agriculture soil health"
-    },
-    {
-      "id": "medical",
-      "label": "Medicine & Biomedicine",
-      "description": "PubMed / MEDLINE, OpenAlex, OpenAlex Vietnam, Crossref, Europe PMC (MetaSearch) (+1 more)",
-      "sources": [
-        "pubmed",
-        "openalex",
         "vietnam",
-        "crossref",
-        "metasearch",
-        "doaj"
-      ],
-      "query": "cancer immunotherapy"
-    },
-    {
-      "id": "auto",
-      "label": "Auto",
-      "description": "Routes the query to the most relevant sources automatically",
-      "sources": [
-        "openalex",
-        "semantic_scholar",
-        "crossref",
-        "pubmed",
-        "arxiv",
-        "vjol",
-        "vast",
-        "vista_nasati",
-        "doaj",
-        "zenodo"
-      ],
-      "query": ""
-    },
-    {
-      "id": "multidisciplinary",
-      "label": "Multidisciplinary",
-      "description": "OpenAlex, Crossref, Semantic Scholar, DOAJ, Zenodo (+3 more)",
-      "sources": [
-        "openalex",
-        "crossref",
-        "semantic_scholar",
-        "doaj",
-        "zenodo",
-        "hal",
-        "cinii",
-        "openaire"
-      ],
-      "query": "interdisciplinary research methods"
-    },
-    {
-      "id": "vietnam",
-      "label": "Vietnamese Research",
-      "description": "OpenAlex Vietnam",
-      "sources": [
-        "vietnam"
-      ],
-      "query": "phát triển kinh tế việt nam"
-    },
-    {
-      "id": "all",
-      "label": "All Enabled Sources",
-      "description": "Queries every source enabled in the app",
-      "sources": [
-        "openalex",
-        "semantic_scholar",
-        "arxiv",
-        "pubmed",
-        "vjol",
-        "vast",
-        "jst_hust",
-        "vista_nasati",
-        "perplexity",
-        "crossref",
-        "metasearch",
-        "dblp",
-        "doaj",
-        "scopus",
-        "ieee",
-        "springer",
-        "biorxiv",
-        "zenodo",
-        "hal",
-        "huggingface",
-        "openreview",
-        "searxng",
-        "clinicaltrials",
-        "medrxiv",
-        "eric",
-        "econbiz",
-        "inspire_hep",
-        "datacite",
-        "pmc",
-        "plos",
-        "banglajol",
-        "nepjol",
-        "mongoliajol",
-        "sljol",
-        "lamjol",
-        "tapchi_nghiencuuyhoc",
-        "vnu_js",
-        "vietnam",
-        "cinii",
-        "dryad",
-        "dataverse",
-        "ntrs",
-        "world_bank",
-        "ajol",
-        "thaijo",
-        "openaire",
-        "core",
-        "dimensions",
-        "web_of_science",
-        "cve_nvd",
-        "hf_datasets",
-        "stackexchange",
-        "europe_pmc",
-        "openfda",
-        "uniprot",
-        "ncbi_geo",
-        "clinvar",
-        "figshare",
-        "sec_edgar",
-        "cisa_kev"
+        "metasearch"
       ],
       "query": ""
     },
     {
       "id": "custom",
-      "label": "Custom",
+      "label": "🛠️ Custom Selection",
       "description": "Uses the source list enabled in Settings",
       "sources": [],
       "query": ""

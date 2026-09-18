@@ -21,7 +21,10 @@ fn bundled_files(source: &str) -> Result<Files, String> {
         "builtin:research-resume" => include_str!("../../skills/research-resume/SKILL.md"),
         _ => return Err("Unknown bundled skill".into()),
     };
-    Ok(BTreeMap::from([("SKILL.md".into(), content.as_bytes().to_vec())]))
+    Ok(BTreeMap::from([(
+        "SKILL.md".into(),
+        content.as_bytes().to_vec(),
+    )]))
 }
 
 fn source_files(source: &str) -> Result<(PathBuf, Files), String> {
@@ -231,7 +234,9 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 #[tauri::command]
 pub fn preview_skill(source: String) -> Result<SkillInfo, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     let (path, files) = source_files(&source)?;
     if files.contains_key(DISABLED) {
         return Err("Source contains the reserved SKILL.md.disabled file".into());
@@ -251,7 +256,9 @@ pub fn preview_skill(source: String) -> Result<SkillInfo, String> {
 
 #[tauri::command]
 pub fn install_skill(source: String, target_root: String) -> Result<SkillInfo, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     let (source_path, files) = source_files(&source)?;
     let root = directory(&target_root)?;
     if files.contains_key(DISABLED) {
@@ -271,7 +278,11 @@ pub fn install_skill(source: String, target_root: String) -> Result<SkillInfo, S
         }
         let receipt = Receipt {
             name,
-            source: if source.starts_with("builtin:") { source.clone() } else { source_path.to_string_lossy().into() },
+            source: if source.starts_with("builtin:") {
+                source.clone()
+            } else {
+                source_path.to_string_lossy().into()
+            },
             enabled: true,
             hashes: hashes(&files),
         };
@@ -292,7 +303,9 @@ pub fn install_skill(source: String, target_root: String) -> Result<SkillInfo, S
 
 #[tauri::command]
 pub fn list_skills(target_root: String) -> Result<Vec<SkillInfo>, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     let root = directory(&target_root)?;
     let mut result = Vec::new();
     for entry in fs::read_dir(root).map_err(|e| e.to_string())? {
@@ -323,7 +336,9 @@ pub fn list_skills(target_root: String) -> Result<Vec<SkillInfo>, String> {
 
 #[tauri::command]
 pub fn remove_skill(target_root: String, name: String) -> Result<String, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     if !valid_name(&name) {
         return Err("Invalid skill name".into());
     }
@@ -347,7 +362,9 @@ pub fn set_skill_enabled(
     name: String,
     enabled: bool,
 ) -> Result<SkillInfo, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     if !valid_name(&name) {
         return Err("Invalid skill name".into());
     }
@@ -410,7 +427,10 @@ mod tests {
         assert_eq!(list_skills(target.clone()).unwrap().len(), 3);
         fs::write(root.join("paper-search/SKILL.md"), "User edits").unwrap();
         assert!(remove_skill(target.clone(), "paper-search".into()).is_err());
-        assert_eq!(fs::read_to_string(root.join("paper-search/SKILL.md")).unwrap(), "User edits");
+        assert_eq!(
+            fs::read_to_string(root.join("paper-search/SKILL.md")).unwrap(),
+            "User edits"
+        );
         assert!(preview_skill("builtin:../unknown".into()).is_err());
         assert!(install_skill("builtin:../unknown".into(), target).is_err());
         fs::remove_dir_all(root).unwrap();

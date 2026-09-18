@@ -11,6 +11,31 @@ pub struct Database {
     pub(crate) conn: Arc<Mutex<Connection>>,
     /// When true, secret values live in the OS keychain rather than this file.
     keychain: bool,
+    /// Write counters for the bounded-retention sweeps, one per capped table.
+    sweeps: Arc<Sweeps>,
+}
+
+/// Every insert into a capped table used to run its own retention `DELETE`, so a
+/// single search paid for three full-table sorts (cache, agent log, history) on
+/// top of its three inserts. The caps exist to stop unbounded growth, not to hold
+/// the table at an exact size, so sweeping once per `SWEEP_EVERY` writes keeps the
+/// same bound — the table simply floats up to `limit + SWEEP_EVERY` between
+/// sweeps — at a fraction of the cost.
+#[derive(Default)]
+struct Sweeps {
+    cache: std::sync::atomic::AtomicU32,
+    logs: std::sync::atomic::AtomicU32,
+    history: std::sync::atomic::AtomicU32,
+}
+
+const SWEEP_EVERY: u32 = 64;
+
+impl Sweeps {
+    /// True once every `SWEEP_EVERY` calls, including the very first one so a
+    /// long-running install still trims promptly after a restart.
+    fn due(counter: &std::sync::atomic::AtomicU32) -> bool {
+        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % SWEEP_EVERY == 0
+    }
 }
 
 #[cfg(test)]
@@ -20,8 +45,21 @@ mod library_tests {
     fn cache_telemetry_comes_from_academic_search_logs() {
         let db = Database::in_memory().unwrap();
         assert_eq!(db.get_telemetry_stats(9876).cache_hit_rate, 0.0);
-        for (id, method, status) in [("1", "POST /api/search", "Success (200 OK)"), ("2", "POST /api/search", "Cache Hit (200 OK)"), ("3", "POST /api/web/search", "Success (200 OK)")] {
-            db.log_agent_query(&AgentLog { id:id.into(), timestamp:"12:00:00".into(), agent_name:"test".into(), method:method.into(), query:"education".into(), result_count:1, latency_ms:1, status:status.into() });
+        for (id, method, status) in [
+            ("1", "POST /api/search", "Success (200 OK)"),
+            ("2", "POST /api/search", "Cache Hit (200 OK)"),
+            ("3", "POST /api/web/search", "Success (200 OK)"),
+        ] {
+            db.log_agent_query(&AgentLog {
+                id: id.into(),
+                timestamp: "12:00:00".into(),
+                agent_name: "test".into(),
+                method: method.into(),
+                query: "education".into(),
+                result_count: 1,
+                latency_ms: 1,
+                status: status.into(),
+            });
         }
         let stats = db.get_telemetry_stats(9876);
         assert_eq!(stats.cache_hit_rate, 50.0);
@@ -35,13 +73,18 @@ mod library_tests {
     fn legacy_import_preserves_existing_and_is_atomic() {
         let db = Database::in_memory().unwrap();
         db.save_paper(&paper("existing", "Current title")).unwrap();
-        let imported = [paper("existing", "Old title"), paper("new", "Economics paper")];
+        let imported = [
+            paper("existing", "Old title"),
+            paper("new", "Economics paper"),
+        ];
         assert_eq!(db.import_library(&imported).unwrap(), 1);
         assert_eq!(db.import_library(&imported).unwrap(), 0);
         assert_eq!(db.find_paper("existing").unwrap().title, "Current title");
         assert_eq!(db.find_paper("new").unwrap().title, "Economics paper");
         assert_eq!(db.read_library().unwrap().len(), 2);
-        assert!(db.import_library(&[paper("valid", "Valid"), paper("", "Invalid")]).is_err());
+        assert!(db
+            .import_library(&[paper("valid", "Valid"), paper("", "Invalid")])
+            .is_err());
         assert!(db.find_paper("valid").is_none());
         db.delete_saved_paper("new").unwrap();
         assert!(db.find_paper("new").is_none());
@@ -56,7 +99,7 @@ mod library_tests {
         // carrying the old default name.
         let legacy = Database::in_memory().unwrap();
         {
-            let conn = legacy.conn.lock().unwrap();
+            let conn = legacy.conn();
             conn.execute(
                 "UPDATE workspaces SET name = ?1",
                 params![LEGACY_DEFAULT_WORKSPACE],
@@ -72,7 +115,7 @@ mod library_tests {
             .create_workspace(LEGACY_DEFAULT_WORKSPACE, None)
             .unwrap();
         {
-            let conn = chosen.conn.lock().unwrap();
+            let conn = chosen.conn();
             bootstrap_default_workspace(&conn).unwrap();
         }
         assert!(chosen
@@ -84,17 +127,37 @@ mod library_tests {
     #[test]
     fn workspace_lifecycle_scopes_papers_and_notes() {
         let db = Database::in_memory().unwrap();
-        assert_eq!(db.list_workspaces().len(), 1, "a default workspace is created");
+        assert_eq!(
+            db.list_workspaces().len(),
+            1,
+            "a default workspace is created"
+        );
         let ws = db.create_workspace("Ung thư", Some("tổng quan")).unwrap();
         assert_eq!(db.list_workspaces().len(), 2);
         let p = paper("p1", "Paper one");
         db.add_workspace_paper(&ws.id, &p, Some("ghi chú")).unwrap();
-        db.add_workspace_paper(&ws.id, &p, Some("cập nhật")).unwrap();
+        db.add_workspace_paper(&ws.id, &p, Some("cập nhật"))
+            .unwrap();
         let papers = db.workspace_papers(&ws.id).unwrap();
         assert_eq!(papers.len(), 1, "same paper is not duplicated");
         assert_eq!(papers[0].note.as_deref(), Some("cập nhật"));
-        assert_eq!(db.list_workspaces().into_iter().find(|w| w.id == ws.id).unwrap().paper_count, 1);
-        db.update_workspace_paper(&ws.id, "p1", Some("lần nữa"), Some("reading"), Some(true), Some(&["ung thư".to_string()])).unwrap();
+        assert_eq!(
+            db.list_workspaces()
+                .into_iter()
+                .find(|w| w.id == ws.id)
+                .unwrap()
+                .paper_count,
+            1
+        );
+        db.update_workspace_paper(
+            &ws.id,
+            "p1",
+            Some("lần nữa"),
+            Some("reading"),
+            Some(true),
+            Some(&["ung thư".to_string()]),
+        )
+        .unwrap();
         let updated = &db.workspace_papers(&ws.id).unwrap()[0];
         assert_eq!(updated.note.as_deref(), Some("lần nữa"));
         assert_eq!(updated.status, "reading");
@@ -105,6 +168,43 @@ mod library_tests {
         assert!(db.workspace_papers(&ws.id).unwrap().is_empty());
         db.delete_workspace(&ws.id).unwrap();
         assert!(!db.workspace_exists(&ws.id));
+    }
+
+    #[test]
+    fn interest_library_migrates_existing_papers_once_and_stays_hidden() {
+        let db = Database::in_memory().unwrap();
+        let legacy = db.create_workspace("Legacy project", None).unwrap();
+        let p = paper("interesting", "Paper of interest");
+        db.add_workspace_paper(&legacy.id, &p, Some("keep this"))
+            .unwrap();
+        {
+            let conn = db.conn();
+            conn.execute(
+                "DELETE FROM workspace_papers WHERE workspace_id = ?1",
+                params![INTEREST_LIBRARY_ID],
+            )
+            .unwrap();
+            conn.execute(
+                "DELETE FROM workspaces WHERE id = ?1",
+                params![INTEREST_LIBRARY_ID],
+            )
+            .unwrap();
+            bootstrap_interest_library(&conn).unwrap();
+        }
+        let migrated = db.library_papers().unwrap();
+        assert_eq!(migrated.len(), 1);
+        assert_eq!(migrated[0].note.as_deref(), Some("keep this"));
+        assert!(db
+            .list_workspaces()
+            .iter()
+            .all(|workspace| workspace.id != INTEREST_LIBRARY_ID));
+
+        db.remove_library_paper("interesting").unwrap();
+        {
+            let conn = db.conn();
+            bootstrap_interest_library(&conn).unwrap();
+        }
+        assert!(db.library_papers().unwrap().is_empty());
     }
 
     #[test]
@@ -120,7 +220,10 @@ mod library_tests {
             workspace_id: None,
             saved: false,
         });
-        assert!(!db.get_search_history(10, None).iter().any(|item| item.saved));
+        assert!(!db
+            .get_search_history(10, None)
+            .iter()
+            .any(|item| item.saved));
         db.set_search_saved("s1", true).unwrap();
         let rows = db.get_search_history(10, None);
         assert!(rows.iter().any(|item| item.id == "s1" && item.saved));
@@ -162,7 +265,10 @@ fn join_tags(tags: &[String]) -> String {
             continue;
         }
         let tag: String = tag.chars().take(40).collect();
-        if !cleaned.iter().any(|existing| existing.eq_ignore_ascii_case(&tag)) {
+        if !cleaned
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&tag))
+        {
             cleaned.push(tag);
         }
         if cleaned.len() >= 20 {
@@ -188,7 +294,10 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Res
         .any(|name| name == column);
     drop(stmt);
     if !exists {
-        conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {column} {ddl}"), [])?;
+        conn.execute(
+            &format!("ALTER TABLE {table} ADD COLUMN {column} {ddl}"),
+            [],
+        )?;
     }
     Ok(())
 }
@@ -197,19 +306,28 @@ fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Res
 /// English throughout. Installs created back then still carry it.
 const LEGACY_DEFAULT_WORKSPACE: &str = "Nghiên cứu của tôi";
 const DEFAULT_WORKSPACE: &str = "My Research";
+pub const INTEREST_LIBRARY_ID: &str = "__interest_library__";
 
 /// Create a default workspace on first run and adopt any papers saved before
 /// workspaces existed, so the library is never orphaned.
 fn bootstrap_default_workspace(conn: &Connection) -> Result<()> {
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM workspaces", [], |row| row.get(0))?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM workspaces WHERE id <> ?1",
+        params![INTEREST_LIBRARY_ID],
+        |row| row.get(0),
+    )?;
     if count == 1 {
         // Bring an older install's default workspace in line with the English
         // default. The name must still be the one this app wrote, and it must be
         // the only workspace, so a name the user chose is never overwritten —
         // and renaming it again afterwards is one click away.
         conn.execute(
-            "UPDATE workspaces SET name = ?1 WHERE name = ?2",
-            params![DEFAULT_WORKSPACE, LEGACY_DEFAULT_WORKSPACE],
+            "UPDATE workspaces SET name = ?1 WHERE name = ?2 AND id <> ?3",
+            params![
+                DEFAULT_WORKSPACE,
+                LEGACY_DEFAULT_WORKSPACE,
+                INTEREST_LIBRARY_ID
+            ],
         )?;
     }
     if count == 0 {
@@ -224,6 +342,40 @@ fn bootstrap_default_workspace(conn: &Connection) -> Result<()> {
             params![id, now],
         )?;
     }
+    Ok(())
+}
+
+/// Create the single library used by the desktop UI. Existing workspace data
+/// is copied only when this hidden library is first introduced, so removing an
+/// item later never makes it reappear on the next launch.
+fn bootstrap_interest_library(conn: &Connection) -> Result<()> {
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM workspaces WHERE id = ?1)",
+        params![INTEREST_LIBRARY_ID],
+        |row| row.get(0),
+    )?;
+    if exists {
+        return Ok(());
+    }
+
+    let now = now_secs();
+    conn.execute(
+        "INSERT INTO workspaces (id, name, description, created_at, updated_at) VALUES (?1, 'Library', NULL, ?2, ?2)",
+        params![INTEREST_LIBRARY_ID, now],
+    )?;
+    conn.execute(
+        "INSERT INTO workspace_papers (workspace_id, paper_id, note, added_at, status, favorite, tags)
+         SELECT ?1, p.id,
+                (SELECT wp.note FROM workspace_papers wp WHERE wp.paper_id = p.id AND wp.note IS NOT NULL ORDER BY wp.added_at DESC LIMIT 1),
+                p.saved_at,
+                COALESCE((SELECT CASE MAX(CASE wp.status WHEN 'read' THEN 2 WHEN 'reading' THEN 1 ELSE 0 END)
+                                  WHEN 2 THEN 'read' WHEN 1 THEN 'reading' ELSE 'unread' END
+                          FROM workspace_papers wp WHERE wp.paper_id = p.id), 'unread'),
+                COALESCE((SELECT MAX(wp.favorite) FROM workspace_papers wp WHERE wp.paper_id = p.id), 0),
+                COALESCE((SELECT wp.tags FROM workspace_papers wp WHERE wp.paper_id = p.id AND wp.tags <> '' ORDER BY wp.added_at DESC LIMIT 1), '')
+         FROM saved_papers p",
+        params![INTEREST_LIBRARY_ID],
+    )?;
     Ok(())
 }
 
@@ -251,11 +403,28 @@ impl Database {
         }
     }
 
+    /// The one way this module takes the connection lock.
+    ///
+    /// A panic while the lock was held used to poison the mutex permanently:
+    /// every later `lock().unwrap()` panicked in turn, so a single failed
+    /// request took the whole database down until the app was restarted. The
+    /// connection itself is not left in a torn state by a panicking Rust
+    /// closure — rusqlite statements are transactional — so recovering the
+    /// guard is safe and strictly better than refusing to serve.
+    pub(crate) fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.conn.lock().unwrap_or_else(|poisoned| {
+            self.conn.clear_poison();
+            poisoned.into_inner()
+        })
+    }
+
     pub fn init() -> Result<Self, String> {
         let db_dir = match std::env::var("SCHOLARGATEWAY_DATA_DIR") {
             Ok(path) => crate::skills::directory(&path)?,
             Err(std::env::VarError::NotPresent) => {
-                let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).map_err(|_| "Cannot locate user data directory")?;
+                let home = std::env::var("HOME")
+                    .or_else(|_| std::env::var("USERPROFILE"))
+                    .map_err(|_| "Cannot locate user data directory")?;
                 let path = PathBuf::from(home).join(".scholargateway");
                 std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
                 path
@@ -287,11 +456,24 @@ impl Database {
     }
 
     fn from_connection(conn: Connection, keychain: bool) -> Result<Self> {
-        conn.execute_batch("CREATE TABLE IF NOT EXISTS agent_credentials (
+        // WAL lets the read paths run while a write is in flight instead of
+        // serialising behind it; `busy_timeout` makes a contended write wait
+        // rather than fail instantly with SQLITE_BUSY. `synchronous=NORMAL` is
+        // the documented safe pairing with WAL for an app-local database.
+        // In-memory test databases do not support WAL, so a failure here is not
+        // fatal — the pragma is an optimisation, not a correctness requirement.
+        let _ = conn.pragma_update(None, "journal_mode", "WAL");
+        let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+        let _ = conn.pragma_update(None, "foreign_keys", "ON");
+
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS agent_credentials (
             id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
             workspace_ids TEXT NOT NULL, writable INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0
-        );")?;
+        );",
+        )?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS search_cache (
@@ -386,21 +568,66 @@ impl Database {
         )?;
 
         ensure_column(&conn, "search_history", "workspace_id", "TEXT")?;
-        ensure_column(&conn, "search_history", "saved", "INTEGER NOT NULL DEFAULT 0")?;
+        ensure_column(
+            &conn,
+            "search_history",
+            "saved",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
         ensure_column(&conn, "download_history", "workspace_id", "TEXT")?;
-        ensure_column(&conn, "workspace_papers", "status", "TEXT NOT NULL DEFAULT 'unread'")?;
-        ensure_column(&conn, "workspace_papers", "favorite", "INTEGER NOT NULL DEFAULT 0")?;
-        ensure_column(&conn, "workspace_papers", "tags", "TEXT NOT NULL DEFAULT ''")?;
+        ensure_column(
+            &conn,
+            "workspace_papers",
+            "status",
+            "TEXT NOT NULL DEFAULT 'unread'",
+        )?;
+        ensure_column(
+            &conn,
+            "workspace_papers",
+            "favorite",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
+        ensure_column(
+            &conn,
+            "workspace_papers",
+            "tags",
+            "TEXT NOT NULL DEFAULT ''",
+        )?;
+        // Indexes are created after `ensure_column` so they can cover columns
+        // that older installs gained by migration.
+        //
+        // `workspace_papers` is keyed (workspace_id, paper_id), which answers
+        // "papers in this workspace" but not the reverse. `read_library` runs
+        // four correlated subqueries per row that all look up by `paper_id`
+        // alone, so without this index each saved paper costs a full scan of
+        // the join table four times over.
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_workspace_papers_paper
+                ON workspace_papers(paper_id);
+             CREATE INDEX IF NOT EXISTS idx_search_history_workspace
+                ON search_history(workspace_id, created_at DESC);
+             CREATE INDEX IF NOT EXISTS idx_download_history_workspace
+                ON download_history(workspace_id, downloaded_at DESC);
+             CREATE INDEX IF NOT EXISTS idx_download_history_paper
+                ON download_history(paper_id);
+             CREATE INDEX IF NOT EXISTS idx_search_cache_created
+                ON search_cache(created_at DESC);
+             CREATE INDEX IF NOT EXISTS idx_saved_papers_saved_at
+                ON saved_papers(saved_at DESC);",
+        )?;
+
         bootstrap_default_workspace(&conn)?;
+        bootstrap_interest_library(&conn)?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
             keychain,
+            sweeps: Arc::new(Sweeps::default()),
         })
     }
 
     pub fn get_cache(&self, hash: &str, ttl_seconds: u64) -> Option<SearchResponse> {
-        let conn = self.conn.lock().ok()?;
+        let conn = self.conn();
         let mut stmt = conn
             .prepare("SELECT response_json, created_at FROM search_cache WHERE query_hash = ?1")
             .ok()?;
@@ -425,7 +652,8 @@ impl Database {
     }
 
     pub fn set_cache(&self, hash: &str, query: &str, resp: &SearchResponse) {
-        if let Ok(conn) = self.conn.lock() {
+        {
+            let conn = self.conn();
             if let Ok(json_str) = serde_json::to_string(resp) {
                 let now = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -435,12 +663,22 @@ impl Database {
                     "INSERT OR REPLACE INTO search_cache (query_hash, query, response_json, created_at) VALUES (?1, ?2, ?3, ?4)",
                     params![hash, query, json_str, now],
                 );
+                // Bounded cache retention: prune entries older than 30 days and
+                // keep the latest 3,000. Swept periodically rather than on every
+                // write; see `Sweeps`.
+                if Sweeps::due(&self.sweeps.cache) {
+                    let thirty_days_ago = now.saturating_sub(30 * 86400);
+                    let _ = conn.execute(
+                        "DELETE FROM search_cache WHERE created_at < ?1 OR query_hash NOT IN (SELECT query_hash FROM search_cache ORDER BY created_at DESC LIMIT 3000)",
+                        params![thirty_days_ago],
+                    );
+                }
             }
         }
     }
 
     pub fn save_paper(&self, paper: &Paper) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         let json_str = serde_json::to_string(paper).unwrap_or_default();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -456,10 +694,13 @@ impl Database {
 
     pub fn get_saved_papers(&self) -> Vec<Paper> {
         let mut papers = Vec::new();
-        if let Ok(conn) = self.conn.lock() {
-            if let Ok(mut stmt) =
-                conn.prepare("SELECT paper_json FROM saved_papers ORDER BY saved_at DESC")
-            {
+        {
+            let conn = self.conn();
+            // Bound to a local first: in edition 2021 an `if let` scrutinee
+            // temporary lives until the end of the enclosing block, which would
+            // outlive the guard declared in that same block.
+            let prepared = conn.prepare("SELECT paper_json FROM saved_papers ORDER BY saved_at DESC");
+            if let Ok(mut stmt) = prepared {
                 if let Ok(rows) = stmt.query_map([], |row| {
                     let json_str: String = row.get(0)?;
                     Ok(serde_json::from_str::<Paper>(&json_str).ok())
@@ -477,27 +718,43 @@ impl Database {
     /// papers through workspace endpoints.
     #[allow(dead_code)]
     pub fn read_library(&self) -> Result<Vec<Paper>, String> {
-        let conn = self.conn.lock().map_err(|_| "Library database lock failed")?;
-        let mut stmt = conn.prepare("SELECT paper_json FROM saved_papers ORDER BY saved_at DESC").map_err(|e| e.to_string())?;
-        let rows = stmt.query_map([], |row| row.get::<_, String>(0)).map_err(|e| e.to_string())?;
-        rows.map(|row| serde_json::from_str(&row.map_err(|e| e.to_string())?).map_err(|e| e.to_string())).collect()
+        let conn = self.conn();
+        let mut stmt = conn
+            .prepare("SELECT paper_json FROM saved_papers ORDER BY saved_at DESC")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        rows.map(|row| {
+            serde_json::from_str(&row.map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+        })
+        .collect()
     }
 
     #[allow(dead_code)]
     pub fn import_library(&self, papers: &[Paper]) -> Result<usize, String> {
-        if papers.len() > 5000 { return Err("At most 5000 papers can be imported at once".into()); }
+        if papers.len() > 5000 {
+            return Err("At most 5000 papers can be imported at once".into());
+        }
         let mut encoded = Vec::new();
         let mut bytes = 0;
         for paper in papers {
-            if paper.id.trim().is_empty() || paper.title.trim().is_empty() { return Err("Imported paper is missing an id or a title".into()); }
+            if paper.id.trim().is_empty() || paper.title.trim().is_empty() {
+                return Err("Imported paper is missing an id or a title".into());
+            }
             let json = serde_json::to_string(paper).map_err(|e| e.to_string())?;
             bytes += json.len();
-            if bytes > 20 * 1024 * 1024 { return Err("Import is limited to 20 MiB".into()); }
+            if bytes > 20 * 1024 * 1024 {
+                return Err("Import is limited to 20 MiB".into());
+            }
             encoded.push(json);
         }
-        let mut conn = self.conn.lock().map_err(|_| "Library database lock failed")?;
+        let mut conn = self.conn();
         let tx = conn.transaction().map_err(|e| e.to_string())?;
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
         let mut inserted = 0;
         for (paper, json) in papers.iter().zip(encoded) {
             inserted += tx.execute("INSERT OR IGNORE INTO saved_papers (id, title, paper_json, saved_at) VALUES (?1, ?2, ?3, ?4)", params![paper.id, paper.title, json, now]).map_err(|e| e.to_string())?;
@@ -507,13 +764,29 @@ impl Database {
     }
 
     pub fn find_paper(&self, id: &str) -> Option<Paper> {
-        if let Some(paper) = self.get_saved_papers().into_iter().find(|paper| crate::details::matches(paper, id)) { return Some(paper); }
-        let conn = self.conn.lock().ok()?;
-        let mut statement = conn.prepare("SELECT response_json FROM search_cache ORDER BY created_at DESC LIMIT 100").ok()?;
-        let rows = statement.query_map([], |row| row.get::<_, String>(0)).ok()?;
+        if let Some(paper) = self
+            .get_saved_papers()
+            .into_iter()
+            .find(|paper| crate::details::matches(paper, id))
+        {
+            return Some(paper);
+        }
+        let conn = self.conn();
+        let mut statement = conn
+            .prepare("SELECT response_json FROM search_cache ORDER BY created_at DESC LIMIT 100")
+            .ok()?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .ok()?;
         for row in rows.flatten() {
             if let Ok(response) = serde_json::from_str::<SearchResponse>(&row) {
-                if let Some(paper) = response.papers.into_iter().find(|paper| crate::details::matches(paper, id)) { return Some(paper); }
+                if let Some(paper) = response
+                    .papers
+                    .into_iter()
+                    .find(|paper| crate::details::matches(paper, id))
+                {
+                    return Some(paper);
+                }
             }
         }
         None
@@ -521,7 +794,7 @@ impl Database {
 
     #[allow(dead_code)]
     pub fn remove_paper(&self, id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute("DELETE FROM saved_papers WHERE id = ?1", params![id])?;
         Ok(())
     }
@@ -534,17 +807,17 @@ impl Database {
     // ---- Workspaces -------------------------------------------------------
 
     pub fn list_workspaces(&self) -> Vec<crate::models::Workspace> {
-        let conn = match self.conn.lock() { Ok(conn) => conn, Err(_) => return Vec::new() };
+        let conn = self.conn();
         let mut statement = match conn.prepare(
             "SELECT w.id, w.name, w.description, w.created_at, w.updated_at,
                     (SELECT COUNT(*) FROM workspace_papers wp WHERE wp.workspace_id = w.id),
                     (SELECT COUNT(*) FROM search_history sh WHERE sh.workspace_id = w.id)
-             FROM workspaces w ORDER BY w.updated_at DESC",
+             FROM workspaces w WHERE w.id <> ?1 ORDER BY w.updated_at DESC",
         ) {
             Ok(statement) => statement,
             Err(_) => return Vec::new(),
         };
-        let rows = statement.query_map([], |row| {
+        let rows = statement.query_map(params![INTEREST_LIBRARY_ID], |row| {
             Ok(crate::models::Workspace {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -562,14 +835,11 @@ impl Database {
     }
 
     pub fn workspace_exists(&self, id: &str) -> bool {
-        self.conn
-            .lock()
-            .ok()
-            .and_then(|conn| {
-                conn.query_row("SELECT 1 FROM workspaces WHERE id = ?1", params![id], |_| Ok(()))
-                    .ok()
+        self.conn()
+            .query_row("SELECT 1 FROM workspaces WHERE id = ?1", params![id], |_| {
+                Ok(())
             })
-            .is_some()
+            .is_ok()
     }
 
     pub fn create_workspace(
@@ -587,7 +857,7 @@ impl Database {
             .map(|value| value.chars().take(2000).collect::<String>());
         let id = uuid::Uuid::new_v4().to_string();
         let now = now_secs();
-        let conn = self.conn.lock().map_err(|_| "Workspace lock failed".to_string())?;
+        let conn = self.conn();
         conn.execute(
             "INSERT INTO workspaces (id, name, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?4)",
             params![id, name, description, now],
@@ -604,7 +874,15 @@ impl Database {
         })
     }
 
-    pub fn rename_workspace(&self, id: &str, name: &str, description: Option<&str>) -> Result<(), String> {
+    pub fn rename_workspace(
+        &self,
+        id: &str,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<(), String> {
+        if id == INTEREST_LIBRARY_ID {
+            return Err("The interest library cannot be renamed".into());
+        }
         let name = name.trim();
         if name.is_empty() || name.chars().count() > 120 {
             return Err("Workspace name must be 1-120 characters".into());
@@ -613,7 +891,7 @@ impl Database {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(|value| value.chars().take(2000).collect::<String>());
-        let conn = self.conn.lock().map_err(|_| "Workspace lock failed".to_string())?;
+        let conn = self.conn();
         let changed = conn
             .execute(
                 "UPDATE workspaces SET name = ?1, description = ?2, updated_at = ?3 WHERE id = ?4",
@@ -627,25 +905,42 @@ impl Database {
     }
 
     pub fn delete_workspace(&self, id: &str) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|_| "Workspace lock failed".to_string())?;
-        conn.execute("DELETE FROM workspace_papers WHERE workspace_id = ?1", params![id])
-            .map_err(|error| error.to_string())?;
+        if id == INTEREST_LIBRARY_ID {
+            return Err("The interest library cannot be deleted".into());
+        }
+        let conn = self.conn();
+        conn.execute(
+            "DELETE FROM workspace_papers WHERE workspace_id = ?1",
+            params![id],
+        )
+        .map_err(|error| error.to_string())?;
         let changed = conn
             .execute("DELETE FROM workspaces WHERE id = ?1", params![id])
             .map_err(|error| error.to_string())?;
-        let _ = conn.execute("UPDATE search_history SET workspace_id = NULL WHERE workspace_id = ?1", params![id]);
+        let _ = conn.execute(
+            "UPDATE search_history SET workspace_id = NULL WHERE workspace_id = ?1",
+            params![id],
+        );
         if changed == 0 {
             return Err("Workspace not found".into());
         }
         Ok(())
     }
 
-    pub fn workspace_papers(&self, workspace_id: &str) -> Result<Vec<crate::models::WorkspacePaper>, String> {
+    pub fn workspace_papers(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<crate::models::WorkspacePaper>, String> {
         self.workspace_papers_page(workspace_id, i64::MAX, 0)
     }
 
-    pub fn workspace_papers_page(&self, workspace_id: &str, limit: i64, offset: i64) -> Result<Vec<crate::models::WorkspacePaper>, String> {
-        let conn = self.conn.lock().map_err(|_| "Workspace lock failed".to_string())?;
+    pub fn workspace_papers_page(
+        &self,
+        workspace_id: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<crate::models::WorkspacePaper>, String> {
+        let conn = self.conn();
         let mut statement = conn
             .prepare(
                 "SELECT p.paper_json, wp.note, wp.added_at, wp.status, wp.favorite, wp.tags
@@ -698,14 +993,17 @@ impl Database {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(|value| value.chars().take(10_000).collect::<String>());
-        let conn = self.conn.lock().map_err(|_| "Workspace lock failed".to_string())?;
+        let conn = self.conn();
         conn.execute(
             "INSERT INTO workspace_papers (workspace_id, paper_id, note, added_at) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(workspace_id, paper_id) DO UPDATE SET note = COALESCE(excluded.note, workspace_papers.note)",
             params![workspace_id, paper.id, note, now_secs()],
         )
         .map_err(|error| error.to_string())?;
-        let _ = conn.execute("UPDATE workspaces SET updated_at = ?1 WHERE id = ?2", params![now_secs(), workspace_id]);
+        let _ = conn.execute(
+            "UPDATE workspaces SET updated_at = ?1 WHERE id = ?2",
+            params![now_secs(), workspace_id],
+        );
         Ok(())
     }
 
@@ -718,7 +1016,7 @@ impl Database {
         favorite: Option<bool>,
         tags: Option<&[String]>,
     ) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|_| "Workspace lock failed".to_string())?;
+        let conn = self.conn();
         let existing = conn
             .query_row(
                 "SELECT note, status, favorite, tags FROM workspace_papers WHERE workspace_id = ?1 AND paper_id = ?2",
@@ -761,7 +1059,7 @@ impl Database {
     }
 
     pub fn remove_workspace_paper(&self, workspace_id: &str, paper_id: &str) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|_| "Workspace lock failed".to_string())?;
+        let conn = self.conn();
         conn.execute(
             "DELETE FROM workspace_papers WHERE workspace_id = ?1 AND paper_id = ?2",
             params![workspace_id, paper_id],
@@ -770,8 +1068,50 @@ impl Database {
         Ok(())
     }
 
+    pub fn library_papers(&self) -> Result<Vec<crate::models::WorkspacePaper>, String> {
+        self.workspace_papers(INTEREST_LIBRARY_ID)
+    }
+
+    pub fn library_papers_page(
+        &self,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<crate::models::WorkspacePaper>, String> {
+        self.workspace_papers_page(INTEREST_LIBRARY_ID, limit, offset)
+    }
+
+    pub fn library_paper_count(&self) -> Result<usize, String> {
+        let conn = self.conn();
+        conn.query_row(
+            "SELECT COUNT(*) FROM workspace_papers WHERE workspace_id = ?1",
+            [INTEREST_LIBRARY_ID],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())
+    }
+
+    pub fn add_library_paper(&self, paper: &Paper) -> Result<(), String> {
+        self.add_workspace_paper(INTEREST_LIBRARY_ID, paper, None)
+    }
+
+    pub fn update_library_paper(
+        &self,
+        paper_id: &str,
+        note: Option<&str>,
+        status: Option<&str>,
+        favorite: Option<bool>,
+        tags: Option<&[String]>,
+    ) -> Result<(), String> {
+        self.update_workspace_paper(INTEREST_LIBRARY_ID, paper_id, note, status, favorite, tags)
+    }
+
+    pub fn remove_library_paper(&self, paper_id: &str) -> Result<(), String> {
+        self.remove_workspace_paper(INTEREST_LIBRARY_ID, paper_id)
+    }
+
     pub fn log_agent_query(&self, log: &AgentLog) {
-        if let Ok(conn) = self.conn.lock() {
+        {
+            let conn = self.conn();
             let _ = conn.execute(
                 "INSERT INTO agent_logs (id, timestamp, agent_name, method, query, result_count, latency_ms, status) 
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -786,22 +1126,45 @@ impl Database {
                     log.status
                 ],
             );
+            // Bounded log retention: keep the latest 2,000. Swept periodically
+            // rather than on every write; see `Sweeps`.
+            if Sweeps::due(&self.sweeps.logs) {
+                let _ = conn.execute(
+                    "DELETE FROM agent_logs WHERE rowid NOT IN (SELECT rowid FROM agent_logs ORDER BY rowid DESC LIMIT 2000)",
+                    [],
+                );
+            }
         }
     }
 
     // Search history
     pub fn add_search_history(&self, item: &SearchHistoryItem) {
-        if let Ok(conn) = self.conn.lock() {
+        {
+            let conn = self.conn();
             let _ = conn.execute(
                 "INSERT INTO search_history (id, query, sources, result_count, elapsed_ms, created_at, workspace_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![item.id, item.query, item.sources, item.result_count, item.elapsed_ms, item.created_at, item.workspace_id],
             );
+            // Bounded unsaved history retention: keep the latest 2,000 unsaved
+            // queries; saved searches are always retained. Swept periodically
+            // rather than on every write; see `Sweeps`.
+            if Sweeps::due(&self.sweeps.history) {
+                let _ = conn.execute(
+                    "DELETE FROM search_history WHERE saved = 0 AND rowid NOT IN (SELECT rowid FROM search_history WHERE saved = 0 ORDER BY rowid DESC LIMIT 2000)",
+                    [],
+                );
+            }
         }
     }
 
-    pub fn get_search_history(&self, limit: usize, workspace_id: Option<&str>) -> Vec<SearchHistoryItem> {
+    pub fn get_search_history(
+        &self,
+        limit: usize,
+        workspace_id: Option<&str>,
+    ) -> Vec<SearchHistoryItem> {
         let mut list = Vec::new();
-        if let Ok(conn) = self.conn.lock() {
+        {
+            let conn = self.conn();
             let (sql, filter) = match workspace_id {
                 Some(_) => (
                     "SELECT id, query, sources, result_count, elapsed_ms, created_at, workspace_id, saved FROM search_history WHERE workspace_id = ?1 ORDER BY saved DESC, created_at DESC LIMIT ?2",
@@ -812,7 +1175,8 @@ impl Database {
                     false,
                 ),
             };
-            if let Ok(mut stmt) = conn.prepare(sql) {
+            let prepared = conn.prepare(sql);
+            if let Ok(mut stmt) = prepared {
                 let map_row = |row: &rusqlite::Row<'_>| {
                     Ok(SearchHistoryItem {
                         id: row.get(0)?,
@@ -841,7 +1205,7 @@ impl Database {
     }
 
     pub fn clear_search_history(&self, workspace_id: Option<&str>) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute(
             "DELETE FROM search_history WHERE (?1 IS NULL OR workspace_id = ?1)",
             params![workspace_id],
@@ -850,20 +1214,24 @@ impl Database {
     }
 
     pub fn delete_search_history_item(&self, id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute("DELETE FROM search_history WHERE id = ?1", params![id])?;
         Ok(())
     }
 
     pub fn set_search_saved(&self, id: &str, saved: bool) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("UPDATE search_history SET saved = ?1 WHERE id = ?2", params![saved as i64, id])?;
+        let conn = self.conn();
+        conn.execute(
+            "UPDATE search_history SET saved = ?1 WHERE id = ?2",
+            params![saved as i64, id],
+        )?;
         Ok(())
     }
 
     // Download history
     pub fn add_download_record(&self, record: &DownloadRecord) {
-        if let Ok(conn) = self.conn.lock() {
+        {
+            let conn = self.conn();
             let _ = conn.execute(
                 "INSERT OR REPLACE INTO download_history (id, paper_id, title, pdf_url, local_path, file_size_bytes, source, year, downloaded_at, workspace_id) 
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -885,7 +1253,8 @@ impl Database {
 
     pub fn get_download_history(&self, workspace_id: Option<&str>) -> Vec<DownloadRecord> {
         let mut list = Vec::new();
-        if let Ok(conn) = self.conn.lock() {
+        {
+            let conn = self.conn();
             let (sql, filter) = match workspace_id {
                 Some(_) => (
                     "SELECT id, paper_id, title, pdf_url, local_path, file_size_bytes, source, year, downloaded_at, workspace_id FROM download_history WHERE workspace_id = ?1 ORDER BY downloaded_at DESC",
@@ -896,7 +1265,8 @@ impl Database {
                     false,
                 ),
             };
-            if let Ok(mut stmt) = conn.prepare(sql) {
+            let prepared = conn.prepare(sql);
+            if let Ok(mut stmt) = prepared {
                 let map_row = |row: &rusqlite::Row<'_>| {
                     Ok(DownloadRecord {
                         id: row.get(0)?,
@@ -927,8 +1297,21 @@ impl Database {
     }
 
     pub fn delete_download_record(&self, id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute("DELETE FROM download_history WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Forgets download records, optionally only those of one workspace.
+    ///
+    /// Records only — the PDFs on disk are the user's files and are left alone,
+    /// which is what the single-record delete already promises.
+    pub fn clear_download_history(&self, workspace_id: Option<&str>) -> Result<()> {
+        let conn = self.conn();
+        conn.execute(
+            "DELETE FROM download_history WHERE (?1 IS NULL OR workspace_id = ?1)",
+            params![workspace_id],
+        )?;
         Ok(())
     }
 
@@ -939,7 +1322,7 @@ impl Database {
                 return Some(value);
             }
         }
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         let mut stmt = conn
             .prepare("SELECT value FROM app_config WHERE key = ?1")
             .ok()?;
@@ -948,7 +1331,7 @@ impl Database {
 
     #[cfg(test)]
     pub fn set_config(&self, key: &str, value: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute(
             "INSERT OR REPLACE INTO app_config (key, value) VALUES (?1, ?2)",
             params![key, value],
@@ -956,11 +1339,26 @@ impl Database {
         Ok(())
     }
 
-    pub fn set_config_patch(&self, values: &std::collections::BTreeMap<String, String>) -> Result<()> {
-        let mut conn = self.conn.lock().unwrap();
-        if values.get("mcp_auth_token").is_some_and(|value| value.is_empty()) {
-            let active: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM agent_credentials WHERE revoked=0)", [], |r| r.get(0))?;
-            if active { return Err(rusqlite::Error::InvalidParameterName("Revoke active agent connections before disabling the administrator token".into())); }
+    pub fn set_config_patch(
+        &self,
+        values: &std::collections::BTreeMap<String, String>,
+    ) -> Result<()> {
+        let mut conn = self.conn();
+        if values
+            .get("mcp_auth_token")
+            .is_some_and(|value| value.is_empty())
+        {
+            let active: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM agent_credentials WHERE revoked=0)",
+                [],
+                |r| r.get(0),
+            )?;
+            if active {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "Revoke active agent connections before disabling the administrator token"
+                        .into(),
+                ));
+            }
         }
         let transaction = conn.transaction()?;
         for (key, value) in values {
@@ -977,13 +1375,16 @@ impl Database {
                 }
                 // Keychain unavailable: fall through and keep the value in SQLite.
             }
-            transaction.execute("INSERT OR REPLACE INTO app_config (key, value) VALUES (?1, ?2)", params![key, value])?;
+            transaction.execute(
+                "INSERT OR REPLACE INTO app_config (key, value) VALUES (?1, ?2)",
+                params![key, value],
+            )?;
         }
         transaction.commit()
     }
 
     pub fn get_all_config(&self) -> serde_json::Value {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         let mut stmt = match conn.prepare("SELECT key, value FROM app_config") {
             Ok(s) => s,
             Err(_) => return serde_json::json!({}),
@@ -1012,7 +1413,7 @@ impl Database {
     }
 
     pub fn clear_cache(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn();
         conn.execute("DELETE FROM search_cache", [])?;
         Ok(())
     }
@@ -1021,9 +1422,10 @@ impl Database {
         let mut logs = Vec::new();
         let mut total_queries = 0;
         let mut sum_latency = 0;
-        let mut cache_hit_rate = 0.0;
+        let cache_hit_rate;
 
-        if let Ok(conn) = self.conn.lock() {
+        {
+            let conn = self.conn();
             if let Ok(mut stmt) = conn.prepare("SELECT id, timestamp, agent_name, method, query, result_count, latency_ms, status FROM agent_logs ORDER BY rowid DESC LIMIT 15") {
                 if let Ok(rows) = stmt.query_map([], |row| {
                     Ok(AgentLog {

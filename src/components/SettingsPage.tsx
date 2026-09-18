@@ -36,6 +36,7 @@ import searchCatalog from '../lib/searchCatalog.json';
 import { AiClients } from './AiClients';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { gatewayFetch, setGatewayToken } from '../lib/gateway';
+import { readSettings, saveSettings } from '../lib/settings';
 
 interface SettingsPageProps {
   port: number;
@@ -79,6 +80,7 @@ const CREDENTIAL_LABELS: Record<string, { label: string; secret: boolean; type?:
   deepseek_session: { label: 'DeepSeek Console Session', secret: true },
   perplexity_session: { label: 'Perplexity Session', secret: true },
   mcp_auth_token: { label: 'Gateway Auth Token', secret: true },
+  proxy_url: { label: 'HTTP(S) Proxy URL', secret: true, placeholder: 'http://user:password@proxy.example:8080' },
 };
 
 /** Group names now ship in English from searchCatalog.json; kept as a seam for future i18n. */
@@ -159,6 +161,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
 
   const [config, setConfig] = useState({
     domain_preset: 'auto',
+    topic_setup_completed: 'false',
     enabled_sources: 'openalex,crossref,semantic_scholar,arxiv,zenodo,hal,pubmed,doaj,vietnam,metasearch',
 
     openai_api_key: '',
@@ -186,6 +189,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
     ieee_api_key: '',
     springer_api_key: '',
     perplexity_api_key: '',
+    core_api_key: '',
     dimensions_api_key: '',
     wos_api_key: '',
     consensus_session: '',
@@ -203,7 +207,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
     cache_ttl_hours: '24',
     max_results_default: '15',
     search_timeout_seconds: '12',
+    search_delay_ms: '1500',
     rate_limit_per_minute: '0',
+    proxy_enabled: 'false',
+    proxy_url: '',
     download_directory: '',
   });
 
@@ -213,17 +220,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
     setLoadingConfig(true);
     const loadConfig = async () => {
       try {
-        const data = isTauri() ? await invoke('read_settings') : await (async () => {
-          const res = await gatewayFetch('/api/config', { signal: controller.signal });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        })();
-        if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid configuration format');
+        const data = await readSettings(controller.signal);
         if (controller.signal.aborted) return;
         setConfig((prev) => {
-          const normalized = Object.fromEntries(
-            Object.entries(data).map(([key, value]) => [key, value == null ? '' : String(value)])
-          ) as Partial<typeof prev>;
+          const normalized = { ...data } as Partial<typeof prev>;
+          if (typeof normalized.enabled_sources === 'string') {
+            const available = new Set(SOURCES_LIST.map((source) => source.id));
+            normalized.enabled_sources = normalized.enabled_sources.split(',')
+              .map((source) => source.trim().toLowerCase())
+              .filter((source, index, list) => available.has(source) && list.indexOf(source) === index)
+              .join(',');
+          }
           return { ...prev, ...normalized };
         });
         setConfigLoaded(true);
@@ -238,6 +245,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
     return () => controller.abort();
   }, [port, loadAttempt]);
 
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: undefined | (() => void);
+    void import('@tauri-apps/api/event').then(({ listen }) => listen<string>('settings-session-updated', (event) => {
+      if (!disposed && CREDENTIAL_LABELS[`${event.payload}_session`]) {
+        handleInputChange(`${event.payload}_session`, KEEP_SENTINEL);
+      }
+    })).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    }).catch(() => undefined);
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+
   const toggleShowKey = (id: string) => setShowKeys((prev) => ({ ...prev, [id]: !prev[id] }));
   const handleInputChange = (field: string, value: string) => setConfig((prev) => ({ ...prev, [field]: value }));
 
@@ -247,20 +269,17 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
     setSaveSuccess(false);
     setSaving(true);
     try {
-      if (isTauri()) {
-        await invoke('save_settings', { payload: config });
-      } else {
-        const res = await gatewayFetch('/api/config', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config),
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok || data?.success === false) throw new Error(data?.error || `Server returned status code ${res.status}`);
-      }
+      await saveSettings(config as unknown as Record<string, string>);
       if (!isConfiguredSecret(config.mcp_auth_token)) {
         setGatewayToken(config.mcp_auth_token || null);
       }
+      setConfig((current) => {
+        const next = { ...current } as Record<string, string>;
+        for (const key of Object.keys(CREDENTIAL_LABELS)) {
+          if (CREDENTIAL_LABELS[key].secret && next[key] && next[key] !== KEEP_SENTINEL) next[key] = KEEP_SENTINEL;
+        }
+        return next as typeof current;
+      });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2000);
     } catch (e) {
@@ -274,6 +293,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
   const testLlm = async (provider: string, apiKey: string, baseUrl?: string, model?: string) => {
     setTestStatus((prev) => ({ ...prev, [provider]: { loading: true } }));
     const freshKey = apiKey && apiKey !== KEEP_SENTINEL ? apiKey : '';
+    if (baseUrl) {
+      try {
+        const url = new URL(baseUrl);
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new Error();
+      } catch {
+        setTestStatus((prev) => ({ ...prev, [provider]: { loading: false, success: false, message: 'Enter a valid HTTP(S) base URL without credentials or a fragment.' } }));
+        return;
+      }
+    }
     try {
       const res = await gatewayFetch('/api/test-llm', {
         method: 'POST',
@@ -293,6 +321,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
   const testSearxng = async () => {
     setTestStatus((prev) => ({ ...prev, searxng: { loading: true } }));
     try {
+      const url = new URL(config.searxng_url);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new Error();
+    } catch {
+      setTestStatus((prev) => ({ ...prev, searxng: { loading: false, success: false, message: 'Enter a valid HTTP(S) SearXNG base URL.' } }));
+      return;
+    }
+    try {
       const res = await gatewayFetch('/api/test-searxng', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -305,6 +340,40 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
       }));
     } catch (e: any) {
       setTestStatus((prev) => ({ ...prev, searxng: { loading: false, success: false, message: `Error: ${e.message}` } }));
+    }
+  };
+
+  const testWebSearch = async () => {
+    setTestStatus((prev) => ({ ...prev, web_search: { loading: true } }));
+    try {
+      const url = new URL(config.web_search_url);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new Error();
+    } catch {
+      setTestStatus((prev) => ({ ...prev, web_search: { loading: false, success: false, message: 'Enter a valid HTTP(S) web-search base URL.' } }));
+      return;
+    }
+    try {
+      const res = await gatewayFetch('/api/test-searxng', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: config.web_search_url, categories: 'general', engines: '' }),
+      });
+      const data = await res.json().catch(() => null);
+      setTestStatus((prev) => ({
+        ...prev,
+        web_search: { loading: false, success: res.ok && data?.success === true, message: data?.message || `Server returned status code ${res.status}`, latency: data?.latency_ms },
+      }));
+    } catch (e) {
+      setTestStatus((prev) => ({ ...prev, web_search: { loading: false, success: false, message: `Error: ${(e as Error).message}` } }));
+    }
+  };
+
+  const chooseDownloadDirectory = async () => {
+    try {
+      const selected = await invoke<string | null>('choose_download_directory');
+      if (selected) handleInputChange('download_directory', selected);
+    } catch (e) {
+      setSaveError(`Unable to choose download directory: ${String(e)}`);
     }
   };
 
@@ -402,7 +471,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
     if (isTauri()) {
       try {
         await invoke('clear_service_session', { service });
-      } catch {}
+      } catch (e) {
+        setSaveError(`Unable to clear ${service} session: ${String(e)}`);
+        return;
+      }
     }
     handleInputChange(`${service}_session`, '');
   };
@@ -410,8 +482,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
   const currentSources = (config.enabled_sources || '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
-    .map((s) => (s === 'vjol' ? 'vietnam' : s))
-    .map((s) => (s === 'searxng' ? 'metasearch' : s))
     .filter(Boolean);
 
   const isSourceActive = (sourceId: string): boolean => {
@@ -545,18 +615,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
   }, [domainGroups, sourceSearch, selectedSourceGroup]);
 
   const PRIMARY_PRESETS = [
-    { id: 'auto', label: '⚡ Auto (Recommended)' },
-    { id: 'all', label: '🌐 Comprehensive (All Sources)' },
-    { id: 'vietnam_academic', label: '🇻🇳 Vietnamese Academic' },
-    { id: 'biomedical', label: '🧬 International Biomedical' },
-    { id: 'cs_ai', label: '🤖 Computer Science & AI' },
+    { id: 'auto', label: '⚡ Auto Discovery' },
+    { id: 'vietnam', label: '🇻🇳 Vietnam Research' },
+    { id: 'biomedical', label: '🧬 Biomedical & Clinical' },
+    { id: 'ai_cs', label: '🤖 AI & Computer Science' },
+    { id: 'stem_nature', label: '🔬 STEM & Physics' },
+    { id: 'social_humanities', label: '📚 Social & Humanities' },
+    { id: 'evidence_review', label: '📊 Evidence Review' },
+    { id: 'open_access', label: '🔓 Open Access' },
+    { id: 'exhaustive', label: '🌐 All Sources' },
     { id: 'custom', label: '🛠️ Custom Selection' },
   ];
 
   const credentialReady = (key: string) => {
     const meta = CREDENTIAL_LABELS[key];
     const value = (config as Record<string, string>)[key] ?? '';
-    return meta?.secret ? isConfiguredSecret(value) : value.trim().length > 0;
+    return meta?.secret ? isConfiguredSecret(value) || value.trim().length > 0 : value.trim().length > 0;
   };
 
   const renderSecretField = (key: string, placeholder?: string) => {
@@ -569,7 +643,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
         <span className="field-label" style={{ margin: 0 }}>{meta.label}</span>
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
           <input
-            type={isSecret && !showKeys[key] ? 'password' : 'text'}
+            id={`setting-${key}`}
+            type={isSecret && !showKeys[key] ? 'password' : (meta.type ?? 'text')}
             autoComplete="off"
             style={{ ...FIELD_STYLE, paddingRight: isSecret ? 32 : 10 }}
             placeholder={isConfiguredSecret(value) ? 'Saved — enter to overwrite' : (placeholder ?? meta.placeholder ?? '')}
@@ -577,12 +652,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
             onChange={(e) => handleInputChange(key, e.target.value)}
           />
           {isSecret && (
-            <button type="button" onClick={() => toggleShowKey(key)} style={{ position: 'absolute', right: 8, background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }} aria-label="Toggle visibility">
+            <button id={`toggle-${key}-visibility`} type="button" onClick={() => toggleShowKey(key)} style={{ position: 'absolute', right: 8, background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }} aria-label={`Toggle ${meta.label} visibility`}>
               {showKeys[key] ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           )}
         </div>
-        {isConfiguredSecret(value) && <span style={{ fontSize: 10, color: 'var(--status-emerald)' }}>Saved in keychain</span>}
+        {isConfiguredSecret(value) && <span style={{ fontSize: 10, color: 'var(--status-emerald)' }}>Saved securely</span>}
       </label>
     );
   };
@@ -651,9 +726,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
           </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Search sources, API credentials, and local agent gateway</p>
         </div>
-        <button id="save-settings" className="action-btn action-btn-primary" onClick={handleSave} disabled={!configLoaded || saving} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600 }}>
-          {saveSuccess ? <><CheckCircle2 size={15} /><span>Saved!</span></> : <><Save size={15} /><span>{saving ? 'Saving…' : 'Save Settings'}</span></>}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button id="refresh-settings" className="action-btn" disabled={loadingConfig || saving} onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
+            <RefreshCw size={14} className={loadingConfig ? 'animate-spin' : ''} /><span>Refresh</span>
+          </button>
+          <button id="save-settings" className="action-btn action-btn-primary" onClick={handleSave} disabled={!configLoaded || saving} style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600 }}>
+            {saveSuccess ? <><CheckCircle2 size={15} /><span>Saved!</span></> : <><Save size={15} /><span>{saving ? 'Saving…' : 'Save Settings'}</span></>}
+          </button>
+        </div>
       </div>
 
       {saveError && <div className="alert alert-warning" role="alert"><div>{saveError}</div></div>}
@@ -990,13 +1070,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
           <Card advanced title="AI Model API Keys (LLM)" subtitle="Used for testing connectivity; evidence synthesis operates deterministically without external transmissions" icon={<Cpu size={16} style={{ color: 'var(--primary-cyan)' }} />}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
               {([
-                { id: 'gemini', name: 'Google Gemini', key: 'gemini_api_key', url: 'https://aistudio.google.com/apikey', icon: <Sparkles size={15} style={{ color: 'var(--primary-cyan)' }} /> },
-                { id: 'perplexity', name: 'Perplexity Sonar', key: 'perplexity_api_key', url: 'https://www.perplexity.ai/settings/api', icon: <Sparkles size={15} style={{ color: 'var(--primary-cyan)' }} /> },
-                { id: 'deepseek', name: 'DeepSeek', key: 'deepseek_api_key', url: 'https://platform.deepseek.com/api_keys', icon: <Cpu size={15} style={{ color: 'var(--primary-cyan)' }} /> },
-                { id: 'openai', name: 'OpenAI / Compatible', key: 'openai_api_key', icon: <Zap size={15} style={{ color: 'var(--status-emerald)' }} /> },
-                { id: 'anthropic', name: 'Anthropic Claude', key: 'anthropic_api_key', url: 'https://console.anthropic.com/settings/keys', icon: <Terminal size={15} style={{ color: 'var(--status-amber)' }} /> },
-              ] as { id: string; name: string; key: string; url?: string; icon: React.ReactNode }[]).map((provider) => {
-                const signedIn = isConfiguredSecret((config as Record<string, string>)[`${provider.id}_session`]);
+                { id: 'gemini', name: 'Google Gemini', key: 'gemini_api_key', url: 'https://aistudio.google.com/apikey', login: 'gemini', icon: <Sparkles size={15} style={{ color: 'var(--primary-cyan)' }} /> },
+                { id: 'perplexity', name: 'Perplexity Sonar', key: 'perplexity_api_key', url: 'https://www.perplexity.ai/settings/api', login: 'perplexity', icon: <Sparkles size={15} style={{ color: 'var(--primary-cyan)' }} /> },
+                { id: 'deepseek', name: 'DeepSeek', key: 'deepseek_api_key', url: 'https://platform.deepseek.com/api_keys', login: 'deepseek', icon: <Cpu size={15} style={{ color: 'var(--primary-cyan)' }} /> },
+                { id: 'openai', name: 'OpenAI / Compatible', key: 'openai_api_key', login: 'openai', icon: <Zap size={15} style={{ color: 'var(--status-emerald)' }} /> },
+                { id: 'anthropic', name: 'Anthropic Claude', key: 'anthropic_api_key', url: 'https://console.anthropic.com/settings/keys', login: 'anthropic', icon: <Terminal size={15} style={{ color: 'var(--status-amber)' }} /> },
+                { id: 'groq', name: 'Groq', key: 'groq_api_key', url: 'https://console.groq.com/keys', icon: <Zap size={15} style={{ color: 'var(--primary-cyan)' }} /> },
+              ] as { id: string; name: string; key: string; url?: string; login?: LoginService; icon: React.ReactNode }[]).map((provider) => {
+                const signedIn = provider.login ? isConfiguredSecret((config as Record<string, string>)[`${provider.login}_session`]) : false;
                 return (
                 <div key={provider.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, border: '1px solid var(--cockpit-border)', borderRadius: 'var(--radius-sm)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1005,13 +1086,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
                       <a href={provider.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--primary-cyan)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>Get Key <ExternalLink size={11} /></a>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {provider.login && <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <button
                       id={`signin-${provider.id}`}
                       type="button"
                       className="action-btn"
                       style={{ padding: '4px 10px', fontSize: 11 }}
-                      onClick={() => handleOpenLogin(provider.id as LoginService)}
+                      onClick={() => handleOpenLogin(provider.login!)}
                       title={`Open ${provider.name}'s developer console in an app window and sign in with your account`}
                     >
                       <LogIn size={12} />
@@ -1025,12 +1106,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
                         type="button"
                         className="action-btn"
                         style={{ padding: '2px 8px', fontSize: 10, color: 'var(--status-rose)' }}
-                        onClick={() => handleClearSession(provider.id as LoginService)}
+                        onClick={() => handleClearSession(provider.login!)}
                       >
                         Clear
                       </button>
                     )}
-                  </div>
+                  </div>}
                   {renderSecretField(provider.key, 'sk-...')}
                   {provider.id === 'openai' && (
                     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1070,7 +1151,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
                 <span className="field-label" style={{ margin: 0 }}>Model</span>
                 <input type="text" style={FIELD_STYLE} value={config.ollama_model} onChange={(e) => handleInputChange('ollama_model', e.target.value)} placeholder="qwen2.5:7b" />
               </label>
-              <button className="action-btn" onClick={() => testLlm('ollama', 'local', config.ollama_base_url)} disabled={testStatus['ollama']?.loading} style={{ padding: '6px 12px', fontSize: 11, height: 32 }}>
+              <button className="action-btn" onClick={() => testLlm('ollama', 'local', config.ollama_base_url, config.ollama_model)} disabled={testStatus['ollama']?.loading} style={{ padding: '6px 12px', fontSize: 11, height: 32 }}>
                 {testStatus['ollama']?.loading ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />}
                 <span>Test Port</span>
               </button>
@@ -1184,7 +1265,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
             </div>
           </Card>
 
-          <Card title="Academic Source Credentials" subtitle="Emails are used for API polite pools; API keys increase rate limits. Stored securely in OS keychain." icon={<Database size={16} style={{ color: 'var(--primary-cyan)' }} />}>
+          <Card title="Academic Source Credentials" subtitle="Emails are used for API polite pools; API keys increase rate limits. Secrets use the OS keychain when available." icon={<Database size={16} style={{ color: 'var(--primary-cyan)' }} />}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
               {SOURCES_LIST.filter((source) => (source.credentials as string[]).length > 0).map((source) => (
                 <div key={source.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, border: '1px solid var(--cockpit-border)', borderRadius: 'var(--radius-sm)' }}>
@@ -1238,7 +1319,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
       {tab === 'clients' && (
         <Card
           title="AI Clients on this machine"
-          subtitle="Install the ScholarGateway MCP server and bundled skills into Claude, Codex and Antigravity"
+          subtitle="Install the ScholarGateway MCP server and bundled skills into supported local AI clients"
           icon={<Plug size={16} style={{ color: 'var(--primary-cyan)' }} />}
         >
           <AiClients />
@@ -1271,14 +1352,41 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
                 <input type="number" min="0" max="100000" style={FIELD_STYLE} value={config.rate_limit_per_minute} onChange={(e) => handleInputChange('rate_limit_per_minute', e.target.value)} />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span className="field-label" style={{ margin: 0 }}>Delay Between Searches (ms, 0–60000)</span>
+                <input id="search-delay-ms" type="number" min="0" max="60000" step="100" style={FIELD_STYLE} value={config.search_delay_ms} onChange={(e) => handleInputChange('search_delay_ms', e.target.value)} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span className="field-label" style={{ margin: 0 }}>PDF Download Directory</span>
-                <input type="text" style={FIELD_STYLE} value={config.download_directory} onChange={(e) => handleInputChange('download_directory', e.target.value)} placeholder="Default: Documents/ScholarGateway/Papers" />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input id="download-directory" type="text" style={FIELD_STYLE} value={config.download_directory} onChange={(e) => handleInputChange('download_directory', e.target.value)} placeholder="Default: Documents/ScholarGateway/Papers" />
+                  {isTauri() && <button id="choose-download-directory" type="button" className="action-btn" onClick={() => void chooseDownloadDirectory()}>Browse…</button>}
+                </div>
               </label>
             </div>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Timeout applies per source request. Changing the port requires saving, quitting completely, and reopening the app; avoid port 1420.</p>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Delay queues cache-miss searches to prevent request bursts; cached pages remain instant. Timeout applies per source request. Changing the port requires a full restart.</p>
+            {config.gateway_port !== String(port) && (
+              <div className="alert alert-warning" role="status">
+                Running on port {port}; configured port {config.gateway_port || '—'} takes effect after a full restart. MCP installs use the saved configured port.
+              </div>
+            )}
           </Card>
 
-          <Card title="Security & Authentication" subtitle="Token protects all endpoints; write-only secret stored in OS keychain" icon={<Server size={16} style={{ color: 'var(--status-rose)' }} />}>
+          <Card
+            title="Outbound Proxy"
+            subtitle="Route academic source and MetaSearch requests through one HTTP(S) proxy; takes effect immediately after saving"
+            icon={<Globe size={16} style={{ color: 'var(--primary-cyan)' }} />}
+            right={
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input id="proxy-enabled" type="checkbox" checked={config.proxy_enabled === 'true'} onChange={(e) => handleInputChange('proxy_enabled', String(e.target.checked))} style={{ width: 16, height: 16, accentColor: 'var(--primary-cyan)' }} />
+                <span style={{ fontSize: 12, fontWeight: 600 }}>Enable proxy</span>
+              </label>
+            }
+          >
+            {renderSecretField('proxy_url')}
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Credentials may be embedded in the URL and are stored as a write-only secret. Use Check Sources to verify routing.</p>
+          </Card>
+
+          <Card title="Security & Authentication" subtitle="Token protects all endpoints; write-only secret uses the OS keychain when available" icon={<Server size={16} style={{ color: 'var(--status-rose)' }} />}>
             {renderSecretField('mcp_auth_token', 'Leave blank for backward compatibility')}
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>
               When a token is set, all routes (<code>/api/*</code>, <code>/mcp</code>, <code>/sse</code>, <code>/messages</code>) require <code>Authorization: Bearer …</code>; only <code>/health</code> and filtered <code>GET /api/config</code> remain public.
@@ -1292,8 +1400,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span className="field-label" style={{ margin: 0 }}>Base URL for web search</span>
-              <input type="url" style={FIELD_STYLE} value={config.web_search_url} onChange={(e) => handleInputChange('web_search_url', e.target.value)} placeholder="http://localhost:8080" />
+              <input id="web-search-url" type="url" style={FIELD_STYLE} value={config.web_search_url} onChange={(e) => handleInputChange('web_search_url', e.target.value)} placeholder="http://localhost:8080" />
             </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button id="test-web-search" type="button" className="action-btn" onClick={() => void testWebSearch()} disabled={!config.web_search_url || testStatus.web_search?.loading}>
+                {testStatus.web_search?.loading ? <RefreshCw size={13} className="animate-spin" /> : <Zap size={13} />}
+                <span>Test Connection</span>
+              </button>
+              <div style={{ flex: 1 }}>{renderTestStatus('web_search')}</div>
+            </div>
           </Card>
 
           <Card advanced title="System Cache" subtitle="Clear local SQLite search cache to fetch fresh records directly from source APIs" icon={<Database size={16} style={{ color: 'var(--text-muted)' }} />}>

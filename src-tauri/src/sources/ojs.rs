@@ -9,7 +9,10 @@ static SUMMARY_SPLIT_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static HREF_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)href=["']((?:https?://[^"']+)?/[^"']*?/article/view/(\d+)(?:/(\d+))?[^"']*)["']"#).unwrap()
+    Regex::new(
+        r#"(?i)href=["']((?:https?://[^"']+)?/[^"']*?/article/view/(\d+)(?:/(\d+))?[^"']*)["']"#,
+    )
+    .unwrap()
 });
 
 static TITLE_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -17,29 +20,38 @@ static TITLE_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static AUTHORS_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)<div[^>]*class=["'][^"']*\bauthors\b[^"']*["'][^>]*>([\s\S]*?)</div>"#).unwrap()
+    Regex::new(r#"(?i)<div[^>]*class=["'][^"']*\bauthors\b[^"']*["'][^>]*>([\s\S]*?)</div>"#)
+        .unwrap()
 });
 
 static PUBLISHED_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)<div[^>]*class=["'][^"']*\b(?:published|date)\b[^"']*["'][^>]*>([\s\S]*?)</div>"#).unwrap()
+    Regex::new(
+        r#"(?i)<div[^>]*class=["'][^"']*\b(?:published|date)\b[^"']*["'][^>]*>([\s\S]*?)</div>"#,
+    )
+    .unwrap()
 });
 
-static YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"\b(19\d\d|20\d\d)\b"#).unwrap()
-});
+static YEAR_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"\b(19\d\d|20\d\d)\b"#).unwrap());
 
 /// Many OJS themes render the title as the bare text of the article link with no
 /// `class="title"` wrapper, so the class-based match above finds nothing.
 static LINK_TITLE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)<a[^>]*href=["'][^"']*?/article/view/\d+(?:/\d+)?[^"']*["'][^>]*>([\s\S]*?)</a>"#).unwrap()
+    Regex::new(
+        r#"(?i)<a[^>]*href=["'][^"']*?/article/view/\d+(?:/\d+)?[^"']*["'][^>]*>([\s\S]*?)</a>"#,
+    )
+    .unwrap()
 });
 
 static PDF_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?i)href=["']([^"']*/article/download/\d+/\d+[^"']*)["']"#).unwrap()
 });
 
-/// Upper bound for a single OJS search page.
-const OJS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(35);
+/// Upper bound for a single OJS search page when the caller has no tighter
+/// budget. These portals render results server-side on shared hosting and
+/// regularly take 20-30s, so they need far longer than the JSON APIs — but the
+/// engine caps this against the time left in the whole search, so one slow
+/// portal can no longer set the latency of every query.
+pub const OJS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(35);
 
 #[derive(Clone, Copy)]
 pub struct OjsSiteConfig {
@@ -173,6 +185,7 @@ pub const THAIJO_CONFIG: OjsSiteConfig = OjsSiteConfig {
 /// Searches every endpoint the site exposes and merges the hits. The call only
 /// fails when *no* endpoint answered, so one dead journal cannot blank a site
 /// that still has working ones.
+#[allow(clippy::too_many_arguments)]
 pub async fn search_ojs(
     client: &reqwest::Client,
     config: OjsSiteConfig,
@@ -180,11 +193,14 @@ pub async fn search_ojs(
     limit: usize,
     year_min: Option<u32>,
     year_max: Option<u32>,
+    timeout: std::time::Duration,
 ) -> Result<Vec<Paper>, String> {
-    let requests = config
-        .search_paths
-        .iter()
-        .map(|path| search_ojs_endpoint(client, config, path, query, limit, year_min, year_max));
+    let timeout = timeout.min(OJS_TIMEOUT);
+    let requests = config.search_paths.iter().map(|path| {
+        search_ojs_endpoint(
+            client, config, path, query, limit, year_min, year_max, timeout,
+        )
+    });
     let outcomes = futures::future::join_all(requests).await;
 
     let mut papers = Vec::new();
@@ -221,6 +237,7 @@ async fn search_ojs_endpoint(
     limit: usize,
     year_min: Option<u32>,
     year_max: Option<u32>,
+    timeout: std::time::Duration,
 ) -> Result<Vec<Paper>, String> {
     let url = format!(
         "{}{}?query={}",
@@ -231,11 +248,10 @@ async fn search_ojs_endpoint(
 
     let res = client
         .get(&url)
-        // These portals render search results server-side on shared hosting and
-        // regularly take 20-30s to answer. The engine's default HTTP timeout is
-        // tuned for JSON APIs and cut them off before they ever replied, so every
-        // one of them looked permanently dead.
-        .timeout(OJS_TIMEOUT)
+        // Overrides the client's JSON-API timeout, which used to cut these
+        // portals off before they ever replied and made every one of them look
+        // permanently dead.
+        .timeout(timeout)
         .header(
             "User-Agent",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ScholarGateway/1.0",
@@ -278,8 +294,14 @@ pub fn parse_ojs_results(
         let mut galley = None;
 
         for cap in HREF_RE.captures_iter(block) {
-            let href = cap.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
-            let id = cap.get(2).map(|m| m.as_str().to_string()).unwrap_or_default();
+            let href = cap
+                .get(1)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_default();
+            let id = cap
+                .get(2)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_default();
             let galley_id = cap.get(3).map(|m| m.as_str());
 
             if galley_id.is_some() {
@@ -310,8 +332,12 @@ pub fn parse_ojs_results(
             }
         };
 
-        let landing_url = landing.map(|u| make_abs(&u)).or_else(|| galley.as_ref().map(|u| make_abs(u)));
-        let Some(source_url) = landing_url else { continue };
+        let landing_url = landing
+            .map(|u| make_abs(&u))
+            .or_else(|| galley.as_ref().map(|u| make_abs(u)));
+        let Some(source_url) = landing_url else {
+            continue;
+        };
 
         // Title: prefer an element carrying a `title` class, then fall back to the
         // text of the article link itself.
@@ -440,9 +466,15 @@ mod tests {
     fn titles_are_read_from_the_article_link_when_no_title_class_exists() {
         let papers = parse_ojs_results(LINK_TITLE_THEME, config(), 10, None, None);
         assert_eq!(papers.len(), 1);
-        assert_eq!(papers[0].title, "Comparison of Deep Learning Models for Recognizing Spikes");
+        assert_eq!(
+            papers[0].title,
+            "Comparison of Deep Learning Models for Recognizing Spikes"
+        );
         assert_eq!(papers[0].year, Some(2020));
-        assert_eq!(papers[0].source_url.as_deref(), Some("https://jst.vn/index.php/old/article/view/491"));
+        assert_eq!(
+            papers[0].source_url.as_deref(),
+            Some("https://jst.vn/index.php/old/article/view/491")
+        );
     }
 
     #[test]
@@ -450,13 +482,19 @@ mod tests {
         let papers = parse_ojs_results(CLASS_TITLE_THEME, config(), 10, None, None);
         assert_eq!(papers.len(), 1);
         assert_eq!(papers[0].title, "Formative assessment in practice");
-        assert_eq!(papers[0].source_url.as_deref(), Some("https://example.org/index.php/demo/article/view/77"));
+        assert_eq!(
+            papers[0].source_url.as_deref(),
+            Some("https://example.org/index.php/demo/article/view/77")
+        );
     }
 
     #[test]
     fn year_filters_still_apply_to_link_titled_rows() {
         assert!(parse_ojs_results(LINK_TITLE_THEME, config(), 10, Some(2022), None).is_empty());
-        assert_eq!(parse_ojs_results(LINK_TITLE_THEME, config(), 10, Some(2019), Some(2021)).len(), 1);
+        assert_eq!(
+            parse_ojs_results(LINK_TITLE_THEME, config(), 10, Some(2019), Some(2021)).len(),
+            1
+        );
     }
 
     // js.vnu.edu.vn has no site-wide index, so the source must fan out across the
@@ -464,7 +502,12 @@ mod tests {
     #[test]
     fn vnu_js_searches_per_journal_endpoints() {
         assert!(VNU_JS_CONFIG.search_paths.len() > 1);
-        assert!(!VNU_JS_CONFIG.search_paths.contains(&"/index.php/index/search/search"));
-        assert!(VNU_JS_CONFIG.search_paths.iter().all(|path| path.ends_with("/search/search")));
+        assert!(!VNU_JS_CONFIG
+            .search_paths
+            .contains(&"/index.php/index/search/search"));
+        assert!(VNU_JS_CONFIG
+            .search_paths
+            .iter()
+            .all(|path| path.ends_with("/search/search")));
     }
 }

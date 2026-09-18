@@ -35,11 +35,14 @@ pub async fn search_dblp(
         .map_err(|e| format!("dblp: read text failed: {}", e))?;
 
     if text.trim_start().starts_with('<') {
-        return Err("dblp: returned HTML or bot-check page instead of JSON".to_string());
+        // The legacy CompleteSearch endpoint may put automated clients behind
+        // a JavaScript challenge. dblp's official SPARQL endpoint exposes the
+        // same current knowledge graph without requiring a browser challenge.
+        return search_dblp_sparql(client, query, limit).await;
     }
 
-    let val: Value = serde_json::from_str(&text)
-        .map_err(|e| format!("dblp: json parse error: {}", e))?;
+    let val: Value =
+        serde_json::from_str(&text).map_err(|e| format!("dblp: json parse error: {}", e))?;
 
     let mut papers = Vec::new();
     let hits = val
@@ -81,7 +84,10 @@ pub async fn search_dblp(
                 .or_else(|| doi.as_ref().map(|d| format!("https://doi.org/{}", d)));
 
             let mut authors = Vec::new();
-            if let Some(author_field) = info.and_then(|i| i.get("authors")).and_then(|a| a.get("author")) {
+            if let Some(author_field) = info
+                .and_then(|i| i.get("authors"))
+                .and_then(|a| a.get("author"))
+            {
                 if let Some(arr) = author_field.as_array() {
                     for a in arr {
                         let name = if let Some(s) = a.as_str() {
@@ -127,6 +133,89 @@ pub async fn search_dblp(
     Ok(papers)
 }
 
+async fn search_dblp_sparql(
+    client: &reqwest::Client,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<Paper>, String> {
+    let needle = query
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace(['\r', '\n'], " ");
+    let sparql = format!(
+        r#"PREFIX dblp: <https://dblp.org/rdf/schema#>
+SELECT ?publication ?title ?year ?venue ?doi WHERE {{
+  ?publication dblp:title ?title .
+  FILTER(CONTAINS(LCASE(STR(?title)), LCASE("{needle}")))
+  OPTIONAL {{ ?publication dblp:yearOfPublication ?year }}
+  OPTIONAL {{ ?publication dblp:publishedIn ?venue }}
+  OPTIONAL {{ ?publication dblp:doi ?doi }}
+}} LIMIT {}"#,
+        limit.clamp(1, 50)
+    );
+    let value: Value = client
+        .post("https://sparql.dblp.org/sparql")
+        .header("Accept", "application/sparql-results+json")
+        .header("Content-Type", "application/sparql-query")
+        .body(sparql)
+        .send()
+        .await
+        .map_err(|error| {
+            format!(
+                "dblp: SPARQL fallback failed — {}",
+                crate::sources::transport_reason(&error)
+            )
+        })?
+        .error_for_status()
+        .map_err(|error| format!("dblp: SPARQL fallback HTTP error — {error}"))?
+        .json()
+        .await
+        .map_err(|error| format!("dblp: SPARQL fallback returned invalid JSON — {error}"))?;
+
+    let bindings = value
+        .pointer("/results/bindings")
+        .and_then(Value::as_array)
+        .ok_or("dblp: SPARQL fallback response is missing bindings")?;
+    Ok(bindings
+        .iter()
+        .filter_map(|binding| {
+            let field = |name: &str| {
+                binding
+                    .get(name)
+                    .and_then(|value| value.get("value"))
+                    .and_then(Value::as_str)
+            };
+            let source_url = field("publication")?.to_string();
+            let title = field("title")?;
+            let doi = field("doi").map(|value| {
+                value
+                    .trim_start_matches("https://doi.org/")
+                    .trim_start_matches("http://doi.org/")
+                    .to_string()
+            });
+            Some(Paper {
+                id: format!(
+                    "dblp:{}",
+                    source_url.trim_start_matches("https://dblp.org/rec/")
+                ),
+                title: clean_html_text(title),
+                authors: Vec::new(),
+                year: field("year").and_then(|value| value.parse().ok()),
+                venue: field("venue").map(str::to_string),
+                abstract_text: None,
+                doi,
+                source_url: Some(source_url),
+                pdf_url: None,
+                citations: None,
+                quartile: None,
+                source: "dblp".to_string(),
+                score: None,
+                open_access: false,
+            })
+        })
+        .collect())
+}
+
 /// Hugging Face Daily Papers / Papers With Code
 pub async fn search_huggingface(
     client: &reqwest::Client,
@@ -142,7 +231,13 @@ pub async fn search_huggingface(
         .header("User-Agent", "ScholarGateway-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("{}: request failed — {}", source_id, crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "{}: request failed — {}",
+                source_id,
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("{}: HTTP {}", source_id, res.status()));
@@ -188,7 +283,9 @@ pub async fn search_huggingface(
             let matched = if q_terms.is_empty() {
                 true
             } else {
-                q_terms.iter().all(|t| title_lower.contains(t) || summary_lower.contains(t))
+                q_terms
+                    .iter()
+                    .all(|t| title_lower.contains(t) || summary_lower.contains(t))
             };
 
             if !matched {
@@ -200,9 +297,7 @@ pub async fn search_huggingface(
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
-            let published_at = paper_obj
-                .get("publishedAt")
-                .and_then(|p| p.as_str());
+            let published_at = paper_obj.get("publishedAt").and_then(|p| p.as_str());
 
             let year = published_at
                 .and_then(|s| s.get(0..4))
@@ -217,16 +312,25 @@ pub async fn search_huggingface(
                             if let Some(s) = x.as_str() {
                                 Some(s.to_string())
                             } else {
-                                x.get("name").and_then(|n| n.as_str()).map(|s| s.to_string())
+                                x.get("name")
+                                    .and_then(|n| n.as_str())
+                                    .map(|s| s.to_string())
                             }
                         })
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
 
-            let citations = item.get("upvotes").and_then(|v| v.as_u64()).map(|u| u as u32);
-            let id_str = arxiv_id.clone().unwrap_or_else(|| format!("hf-{}", title_lower.chars().take(20).collect::<String>()));
-            let pdf_url = arxiv_id.as_ref().map(|id| format!("https://arxiv.org/pdf/{}.pdf", id));
+            let citations = item
+                .get("upvotes")
+                .and_then(|v| v.as_u64())
+                .map(|u| u as u32);
+            let id_str = arxiv_id.clone().unwrap_or_else(|| {
+                format!("hf-{}", title_lower.chars().take(20).collect::<String>())
+            });
+            let pdf_url = arxiv_id
+                .as_ref()
+                .map(|id| format!("https://arxiv.org/pdf/{}.pdf", id));
             let source_url = format!("https://huggingface.co/papers/{}", id_str);
 
             papers.push(Paper {
@@ -235,7 +339,11 @@ pub async fn search_huggingface(
                 authors,
                 year,
                 venue: Some("Hugging Face Daily Papers / arXiv".to_string()),
-                abstract_text: if summary.is_empty() { None } else { Some(clean_html_text(summary)) },
+                abstract_text: if summary.is_empty() {
+                    None
+                } else {
+                    Some(clean_html_text(summary))
+                },
                 doi: None,
                 source_url: Some(source_url),
                 pdf_url,
@@ -269,7 +377,12 @@ pub async fn search_openreview(
         .header("User-Agent", "ScholarGateway-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("openreview: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "openreview: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("openreview: HTTP {}", res.status()));

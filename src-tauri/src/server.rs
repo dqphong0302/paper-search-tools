@@ -16,6 +16,20 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tower_http::cors::{Any, CorsLayer};
 
+static SEARCH_GATE: tokio::sync::Mutex<Option<tokio::time::Instant>> =
+    tokio::sync::Mutex::const_new(None);
+
+async fn wait_for_search_slot(delay: Duration) {
+    if delay.is_zero() {
+        return;
+    }
+    let mut next = SEARCH_GATE.lock().await;
+    if let Some(ready) = *next {
+        tokio::time::sleep_until(ready).await;
+    }
+    *next = Some(tokio::time::Instant::now() + delay);
+}
+
 #[derive(serde::Deserialize)]
 struct TrendsQuery {
     geo: Option<String>,
@@ -68,6 +82,20 @@ struct SourceCheckResponse {
 }
 
 #[derive(serde::Deserialize)]
+struct QueryPreviewRequest {
+    query: String,
+    #[serde(default)]
+    sources: Option<Vec<String>>,
+}
+
+#[derive(serde::Serialize)]
+struct QueryPreviewResponse {
+    query: String,
+    adapter_version: &'static str,
+    sources: Vec<crate::query::QueryPreview>,
+}
+
+#[derive(serde::Deserialize)]
 struct SaveSearchRequest {
     #[serde(default)]
     saved: bool,
@@ -101,7 +129,10 @@ pub async fn start_server(port: u16, db: Database) {
 
     let listener = match tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port)).await {
         Ok(listener) => listener,
-        Err(error) => { eprintln!("Gateway could not bind port {port}: {error}"); return; }
+        Err(error) => {
+            eprintln!("Gateway could not bind port {port}: {error}");
+            return;
+        }
     };
     println!("ScholarGateway: http://127.0.0.1:{port} (REST + /mcp + /sse)");
     let _ = axum::serve(listener, app).await;
@@ -110,17 +141,26 @@ pub async fn start_server(port: u16, db: Database) {
 pub(crate) fn gateway_router(state: AppState) -> Router {
     let port = state.port;
     let cors = CorsLayer::new()
-        .allow_origin(tower_http::cors::AllowOrigin::predicate(move |origin, _| crate::security::trusted_origin(origin, port)))
+        .allow_origin(tower_http::cors::AllowOrigin::predicate(
+            move |origin, _| crate::security::trusted_origin(origin, port),
+        ))
         .allow_methods(Any)
         .allow_headers(Any);
 
     Router::new()
         .route("/health", get(health_handler))
         .route("/api/health", get(health_handler))
-        .route("/api/catalog", get(|| async { Json(crate::catalog::catalog()) }))
-        .route("/api/agents", get(crate::agents::list).post(crate::agents::create_handler))
+        .route(
+            "/api/catalog",
+            get(|| async { Json(crate::catalog::catalog()) }),
+        )
+        .route(
+            "/api/agents",
+            get(crate::agents::list).post(crate::agents::create_handler),
+        )
         .route("/api/agents/{id}", delete(crate::agents::revoke))
         .route("/api/search", post(search_handler))
+        .route("/api/query/preview", post(query_preview_handler))
         .route("/api/web/search", post(crate::web_search::handler))
         .route("/api/paper/{id}", get(paper_handler))
         .route("/api/paper/{id}/citations", get(citations_handler))
@@ -136,7 +176,10 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
             "/api/history/searches/{id}",
             delete(delete_search_history_item_handler).patch(save_search_handler),
         )
-        .route("/api/history/downloads", get(get_download_history_handler))
+        .route(
+            "/api/history/downloads",
+            get(get_download_history_handler).delete(clear_download_history_handler),
+        )
         .route(
             "/api/history/downloads/{id}",
             delete(delete_download_handler),
@@ -145,6 +188,13 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
         .route(
             "/api/config",
             get(get_config_handler).post(set_config_handler),
+        )
+        .route(
+            "/api/library",
+            get(list_library_handler)
+                .post(add_library_paper_handler)
+                .patch(update_library_paper_handler)
+                .delete(remove_library_paper_handler),
         )
         .route(
             "/api/workspaces",
@@ -173,7 +223,10 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
         // "Failed to fetch" instead of the explanation the response actually carries.
         // The allowlist predicate is unchanged, so an untrusted origin still gets a
         // 403 with no CORS header.
-        .layer(axum::middleware::from_fn_with_state(state.clone(), crate::security::guard))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::security::guard,
+        ))
         .layer(cors)
         .with_state(state)
 }
@@ -182,7 +235,11 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
 /// `x-sg-agent`; everything else is treated as an external REST caller.
 fn client_label(headers: &HeaderMap) -> String {
     let clean = |value: &str| value.trim().chars().take(60).collect::<String>();
-    if let Some(agent) = headers.get("x-sg-agent").and_then(|v| v.to_str().ok()).map(clean) {
+    if let Some(agent) = headers
+        .get("x-sg-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(clean)
+    {
         if !agent.is_empty() {
             return format!("Agent · {agent}");
         }
@@ -190,7 +247,11 @@ fn client_label(headers: &HeaderMap) -> String {
     if headers.get("x-sg-client").and_then(|v| v.to_str().ok()) == Some("ui") {
         return "User (UI)".to_string();
     }
-    let user_agent = headers.get("user-agent").and_then(|v| v.to_str().ok()).map(clean).unwrap_or_default();
+    let user_agent = headers
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(clean)
+        .unwrap_or_default();
     if user_agent.is_empty() {
         "REST client".to_string()
     } else {
@@ -211,18 +272,28 @@ async fn health_handler(State(state): State<AppState>) -> Json<serde_json::Value
 
 // Resolve user defaults once, before hashing or dispatching.
 fn apply_search_defaults(req: &mut SearchRequest, get: impl Fn(&str) -> Option<String>) {
-    req.limit = Some(req.limit.or_else(|| get("max_results_default")
-        .and_then(|value| value.parse().ok())).unwrap_or(15).clamp(1, 50));
+    req.limit = Some(
+        req.limit
+            .or_else(|| get("max_results_default").and_then(|value| value.parse().ok()))
+            .unwrap_or(15)
+            .clamp(1, 50),
+    );
     if req.sources.is_none() {
-        req.sources = Some(vec![get("domain_preset").filter(|value| !value.trim().is_empty())
+        req.sources = Some(vec![get("domain_preset")
+            .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| "auto".to_string())]);
     }
     if let Some(sources) = &mut req.sources {
         let mut expanded = Vec::new();
         for source in sources.iter() {
             if source == "custom" {
-                expanded.extend(get("enabled_sources").unwrap_or_default().split(',')
-                    .map(|value| value.trim().to_lowercase()).filter(|value| !value.is_empty()));
+                expanded.extend(
+                    get("enabled_sources")
+                        .unwrap_or_default()
+                        .split(',')
+                        .map(|value| value.trim().to_lowercase())
+                        .filter(|value| !value.is_empty()),
+                );
             } else {
                 expanded.push(source.clone());
             }
@@ -233,21 +304,113 @@ fn apply_search_defaults(req: &mut SearchRequest, get: impl Fn(&str) -> Option<S
 
 fn cached_search(db: &Database, key: &str, ttl: u64) -> Option<SearchResponse> {
     db.get_cache(key, ttl).filter(|response| {
-        !response.sources.iter().any(|source| source.queried && !source.ok)
+        !response
+            .sources
+            .iter()
+            .any(|source| source.queried && !source.ok)
             || db.get_cache(key, ttl.min(30)).is_some()
     })
 }
 
-fn search_cache_key(req: &SearchRequest, creds: &crate::models::SourceCredentials, timeout: u64) -> String {
+fn search_cache_key(
+    req: &SearchRequest,
+    creds: &crate::models::SourceCredentials,
+    timeout: u64,
+) -> String {
     let mut candidates = req.clone();
     candidates.limit = None;
     candidates.offset = None;
     candidates.workspace_id = None;
     // Hash credentials rather than storing them. A key/session change selects a
     // new cache entry, including when an older in-flight search completes later.
-    let encoded = serde_json::to_vec(&("search-schema-v8", timeout, candidates, creds))
-        .expect("search cache inputs are serializable");
-    format!("{:x}", md5::compute(encoded))
+    let encoded = serde_json::to_vec(&(
+        "search-schema-v8",
+        crate::query::ADAPTER_VERSION,
+        timeout,
+        candidates,
+        creds,
+    ))
+    .expect("search cache inputs are serializable");
+    content_hash(&encoded)
+}
+
+/// Hex digest used wherever a value is addressed by its content.
+///
+/// SHA-256 rather than MD5: a collision here does not leak anything, but it
+/// does serve one request's cached results to a different query, or write one
+/// paper's PDF over another's file. Truncated to 32 hex characters, which is
+/// the same key width as before while keeping SHA-256's collision resistance.
+pub(crate) fn content_hash(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(bytes);
+    digest.iter().take(16).map(|b| format!("{b:02x}")).collect()
+}
+
+async fn query_preview_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<QueryPreviewRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let query = payload.query.trim().to_string();
+    if query.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "query is required" })),
+        );
+    }
+
+    let mut request = SearchRequest {
+        query: query.clone(),
+        sources: payload.sources,
+        limit: None,
+        year_min: None,
+        year_max: None,
+        open_access_only: None,
+        offset: None,
+        searxng_url: None,
+        searxng_categories: None,
+        searxng_engines: None,
+        workspace_id: None,
+    };
+    apply_search_defaults(&mut request, |key| state.db.get_config(key));
+    let resolved = crate::engine::resolve_sources(request.sources.as_deref(), &query);
+    let catalog = crate::catalog::catalog();
+    let selected: Vec<&str> = catalog
+        .sources
+        .iter()
+        .filter(|source| source.available)
+        .filter(|source| {
+            resolved
+                .as_ref()
+                .is_none_or(|ids| ids.iter().any(|id| id.eq_ignore_ascii_case(&source.id)))
+        })
+        .map(|source| source.id.as_str())
+        .collect();
+    let invalid = resolved.as_ref().is_some_and(|ids| {
+        ids.iter().any(|id| {
+            !catalog
+                .sources
+                .iter()
+                .any(|source| source.available && source.id.eq_ignore_ascii_case(id))
+        })
+    });
+    if invalid {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "unknown or unavailable source" })),
+        );
+    }
+    let body = QueryPreviewResponse {
+        query: query.clone(),
+        adapter_version: crate::query::ADAPTER_VERSION,
+        sources: selected
+            .into_iter()
+            .map(|source| crate::query::preview(source, &query))
+            .collect(),
+    };
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(body).unwrap_or_default()),
+    )
 }
 
 #[cfg(test)]
@@ -266,9 +429,56 @@ mod search_settings_tests {
         response.sources[0].ok = true;
         response.sources[0].error = None;
         db.set_cache("success", "fixture", &response);
-        db.conn.lock().unwrap().execute("UPDATE search_cache SET created_at = created_at - 31", []).unwrap();
+        db.conn
+            .lock()
+            .unwrap()
+            .execute("UPDATE search_cache SET created_at = created_at - 31", [])
+            .unwrap();
         assert!(cached_search(&db, "partial", 3600).is_none());
         assert!(cached_search(&db, "success", 3600).is_some());
+    }
+
+    #[tokio::test]
+    async fn query_preview_reports_source_specific_syntax() {
+        let state = AppState {
+            db: Database::in_memory().unwrap(),
+            engine: Arc::new(AcademicEngine::new()),
+            port: 0,
+            mcp_sessions: Default::default(),
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server =
+            tokio::spawn(
+                async move { axum::serve(listener, gateway_router(state)).await.unwrap() },
+            );
+        let query = r#""Heart Failure"[MeSH Terms] AND therapy[tiab] NOT animals[mh]"#;
+        let response: serde_json::Value = reqwest::Client::new()
+            .post(format!("{base}/api/query/preview"))
+            .json(&serde_json::json!({
+                "query": query,
+                "sources": ["pubmed", "europe_pmc", "arxiv", "semantic_scholar"]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let items = response["sources"].as_array().unwrap();
+        let find = |id: &str| items.iter().find(|item| item["id"] == id).unwrap();
+        assert_eq!(find("pubmed")["query"], query);
+        assert_eq!(find("pubmed")["mode"], "pubmed_mesh");
+        assert!(find("europe_pmc")["query"]
+            .as_str()
+            .unwrap()
+            .contains("MESH:"));
+        assert!(find("arxiv")["query"].as_str().unwrap().contains("ANDNOT"));
+        assert_eq!(
+            find("semantic_scholar")["query"],
+            "\"Heart Failure\" therapy"
+        );
+        server.abort();
     }
 
     #[tokio::test]
@@ -276,25 +486,52 @@ mod search_settings_tests {
         let db = Database::in_memory().unwrap();
         for (id, workspace_id) in [("a", Some("A")), ("b", Some("B")), ("legacy", None)] {
             db.add_search_history(&SearchHistoryItem {
-                id: id.into(), query: id.into(), sources: None, result_count: 0,
-                elapsed_ms: 0, created_at: 1, workspace_id: workspace_id.map(str::to_string), saved: false,
+                id: id.into(),
+                query: id.into(),
+                sources: None,
+                result_count: 0,
+                elapsed_ms: 0,
+                created_at: 1,
+                workspace_id: workspace_id.map(str::to_string),
+                saved: false,
             });
         }
-        let state = AppState { db: db.clone(), engine: Arc::new(AcademicEngine::new()), port: 0, mcp_sessions: Default::default() };
+        let state = AppState {
+            db: db.clone(),
+            engine: Arc::new(AcademicEngine::new()),
+            port: 0,
+            mcp_sessions: Default::default(),
+        };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move { axum::serve(listener, gateway_router(state)).await.unwrap() });
+        let server =
+            tokio::spawn(
+                async move { axum::serve(listener, gateway_router(state)).await.unwrap() },
+            );
         let client = reqwest::Client::new();
         for workspace in ["missing", "A"] {
-            assert!(client.delete(format!("{base}/api/history/searches?workspace_id={workspace}"))
-                .send().await.unwrap().status().is_success());
+            assert!(client
+                .delete(format!(
+                    "{base}/api/history/searches?workspace_id={workspace}"
+                ))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .is_success());
         }
         let remaining = db.get_search_history(10, None);
         assert_eq!(remaining.len(), 2);
         assert!(remaining.iter().any(|item| item.id == "b"));
         assert!(remaining.iter().any(|item| item.id == "legacy"));
         // Preserve the explicitly global API operation for existing clients.
-        assert!(client.delete(format!("{base}/api/history/searches")).send().await.unwrap().status().is_success());
+        assert!(client
+            .delete(format!("{base}/api/history/searches"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
         assert!(db.get_search_history(10, None).is_empty());
         server.abort();
     }
@@ -304,58 +541,99 @@ mod search_settings_tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let calls = Arc::new(AtomicUsize::new(0));
         let counter = calls.clone();
-        let source = Router::new().route("/search", get(move || {
-            let counter = counter.clone();
-            async move {
-                counter.fetch_add(1, Ordering::SeqCst);
-                Json(serde_json::json!({"results": (0..3).map(|i| serde_json::json!({
+        let source = Router::new().route(
+            "/search",
+            get(move || {
+                let counter = counter.clone();
+                async move {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    Json(
+                        serde_json::json!({"results": (0..3).map(|i| serde_json::json!({
                     "title": format!("Probe result {i}"),
                     "url": format!("https://example.org/{i}.pdf"),
                     "publishedDate": "2024-01-01"
-                })).collect::<Vec<_>>()}))
-            }
-        }));
+                })).collect::<Vec<_>>()}),
+                    )
+                }
+            }),
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let source_url = format!("http://{}", listener.local_addr().unwrap());
         let upstream = tokio::spawn(async move { axum::serve(listener, source).await.unwrap() });
         let db = Database::in_memory().unwrap();
         db.set_config("searxng_enabled", "true").unwrap();
         db.set_config("searxng_url", &source_url).unwrap();
-        let state = AppState { db: db.clone(), engine: Arc::new(AcademicEngine::new()), port: 0, mcp_sessions: Default::default() };
+        let state = AppState {
+            db: db.clone(),
+            engine: Arc::new(AcademicEngine::new()),
+            port: 0,
+            mcp_sessions: Default::default(),
+        };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move { axum::serve(listener, gateway_router(state)).await.unwrap() });
+        let server =
+            tokio::spawn(
+                async move { axum::serve(listener, gateway_router(state)).await.unwrap() },
+            );
         let client = reqwest::Client::new();
 
-        let first: serde_json::Value = client.post(format!("{base}/api/source/check"))
-            .json(&serde_json::json!({"id": "metasearch"})).send().await.unwrap()
-            .json().await.unwrap();
+        let first: serde_json::Value = client
+            .post(format!("{base}/api/source/check"))
+            .json(&serde_json::json!({"id": "metasearch"}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(first["ok"], true);
         assert_eq!(first["count"], 3);
         assert_eq!(first["needs_setup"], false);
         // The default probe query is filled in for the caller.
-        assert!(first["query"].as_str().is_some_and(|query| !query.is_empty()));
+        assert!(first["query"]
+            .as_str()
+            .is_some_and(|query| !query.is_empty()));
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
         // Same source, same query: a cache hit here would report health without
         // ever contacting the source, so the second check must call it again.
-        let second: serde_json::Value = client.post(format!("{base}/api/source/check"))
-            .json(&serde_json::json!({"id": "metasearch"})).send().await.unwrap()
-            .json().await.unwrap();
+        let second: serde_json::Value = client
+            .post(format!("{base}/api/source/check"))
+            .json(&serde_json::json!({"id": "metasearch"}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(second["ok"], true);
         assert_eq!(calls.load(Ordering::SeqCst), 2);
 
         // A source needing a credential is reported as such, not as a failure.
-        let keyed: serde_json::Value = client.post(format!("{base}/api/source/check"))
-            .json(&serde_json::json!({"id": "scopus"})).send().await.unwrap()
-            .json().await.unwrap();
+        let keyed: serde_json::Value = client
+            .post(format!("{base}/api/source/check"))
+            .json(&serde_json::json!({"id": "scopus"}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(keyed["needs_setup"], true);
         assert_eq!(keyed["ok"], false);
 
         for id in ["not_a_source", "medpharmres", ""] {
-            let response = client.post(format!("{base}/api/source/check"))
-                .json(&serde_json::json!({"id": id})).send().await.unwrap();
-            assert_eq!(response.status(), reqwest::StatusCode::BAD_REQUEST, "accepted {id}");
+            let response = client
+                .post(format!("{base}/api/source/check"))
+                .json(&serde_json::json!({"id": id}))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                reqwest::StatusCode::BAD_REQUEST,
+                "accepted {id}"
+            );
         }
         server.abort();
         upstream.abort();
@@ -366,38 +644,58 @@ mod search_settings_tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let calls = Arc::new(AtomicUsize::new(0));
         let counter = calls.clone();
-        let source = Router::new().route("/search", get(move || {
-            let counter = counter.clone();
-            async move {
-                let generation = counter.fetch_add(1, Ordering::SeqCst);
-                Json(serde_json::json!({"results": (0..40).map(|i| serde_json::json!({
+        let source = Router::new().route(
+            "/search",
+            get(move || {
+                let counter = counter.clone();
+                async move {
+                    let generation = counter.fetch_add(1, Ordering::SeqCst);
+                    Json(
+                        serde_json::json!({"results": (0..40).map(|i| serde_json::json!({
                     "title": format!("Candidate {generation} number {i}"),
                     "url": format!("https://example.org/{generation}/{i}.pdf"),
                     "publishedDate": "2024-01-01"
-                })).collect::<Vec<_>>()}))
-            }
-        }));
+                })).collect::<Vec<_>>()}),
+                    )
+                }
+            }),
+        );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let source_url = format!("http://{}", listener.local_addr().unwrap());
         let upstream = tokio::spawn(async move { axum::serve(listener, source).await.unwrap() });
         let db = Database::in_memory().unwrap();
-        let state = AppState { db: db.clone(), engine: Arc::new(AcademicEngine::new()), port: 0, mcp_sessions: Default::default() };
+        let state = AppState {
+            db: db.clone(),
+            engine: Arc::new(AcademicEngine::new()),
+            port: 0,
+            mcp_sessions: Default::default(),
+        };
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move { axum::serve(listener, gateway_router(state)).await.unwrap() });
+        let server =
+            tokio::spawn(
+                async move { axum::serve(listener, gateway_router(state)).await.unwrap() },
+            );
         let client = reqwest::Client::new();
         let mut request = serde_json::json!({"query":"pagination fixture", "sources":["metasearch"],
             "limit":15, "searxng_url":source_url, "workspace_id":"A"});
         let mut ids = std::collections::HashSet::new();
         for (offset, expected) in [(0, 15), (15, 15), (30, 10), (40, 0), (1500, 0)] {
             request["offset"] = offset.into();
-            let response = client.post(format!("{base}/api/search")).json(&request).send().await.unwrap();
+            let response = client
+                .post(format!("{base}/api/search"))
+                .json(&request)
+                .send()
+                .await
+                .unwrap();
             assert!(response.status().is_success());
             let page: SearchResponse = response.json().await.unwrap();
             assert_eq!(page.total, expected);
             assert_eq!(page.available_total, 40);
             assert_eq!(page.cache_hit, offset != 0);
-            for paper in page.papers { assert!(ids.insert(paper.id), "page repeated a paper"); }
+            for paper in page.papers {
+                assert!(ids.insert(paper.id), "page repeated a paper");
+            }
         }
         assert_eq!(ids.len(), 40);
         assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -414,25 +712,53 @@ mod search_settings_tests {
                 "params":{"name":"search_academic_papers", "arguments":{
                     "query":"pagination fixture", "sources":["metasearch"], "limit":7, "offset":0, "workspace_id":"B"
                 }}})).send().await.unwrap().json().await.unwrap();
-        let page: SearchResponse = serde_json::from_str(mcp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        let page: SearchResponse =
+            serde_json::from_str(mcp["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
         assert_eq!(page.total, 7);
         assert!(page.cache_hit);
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
         // REST settings and the shared desktop settings persistence path both
         // select a fresh pool without manually clearing the cache.
-        for (field, value) in [("ncbi_api_key", "new-key"), ("consensus_session", "new-session")] {
-            assert!(client.post(format!("{base}/api/config")).json(&serde_json::json!({field:value}))
-                .send().await.unwrap().status().is_success());
-            let page: SearchResponse = client.post(format!("{base}/api/search")).json(&request)
-                .send().await.unwrap().json().await.unwrap();
+        for (field, value) in [
+            ("ncbi_api_key", "new-key"),
+            ("consensus_session", "new-session"),
+        ] {
+            assert!(client
+                .post(format!("{base}/api/config"))
+                .json(&serde_json::json!({field:value}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .is_success());
+            let page: SearchResponse = client
+                .post(format!("{base}/api/search"))
+                .json(&request)
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
             assert!(!page.cache_hit);
             assert_eq!(page.total, 7);
         }
         assert_eq!(calls.load(Ordering::SeqCst), 3);
-        db.set_config_patch(&std::collections::BTreeMap::from([("ncbi_api_key".into(), "".into())])).unwrap();
-        let page: SearchResponse = client.post(format!("{base}/api/search")).json(&request)
-            .send().await.unwrap().json().await.unwrap();
+        db.set_config_patch(&std::collections::BTreeMap::from([(
+            "ncbi_api_key".into(),
+            "".into(),
+        )]))
+        .unwrap();
+        let page: SearchResponse = client
+            .post(format!("{base}/api/search"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert!(!page.cache_hit);
         assert_eq!(calls.load(Ordering::SeqCst), 4);
         server.abort();
@@ -453,14 +779,26 @@ mod search_settings_tests {
         let client = reqwest::Client::new();
 
         // A default workspace is provisioned and listed.
-        let list: serde_json::Value = client.get(format!("{base}/api/workspaces")).send().await.unwrap().json().await.unwrap();
+        let list: serde_json::Value = client
+            .get(format!("{base}/api/workspaces"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(list.as_array().unwrap().len(), 1);
 
         // Create a project.
         let created: serde_json::Value = client
             .post(format!("{base}/api/workspaces"))
             .json(&serde_json::json!({"name": "Ung thư phổi", "description": "review"}))
-            .send().await.unwrap().json().await.unwrap();
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         let id = created["id"].as_str().unwrap().to_string();
 
         // Add a paper with a note, then read it back.
@@ -468,10 +806,19 @@ mod search_settings_tests {
         assert!(client
             .post(format!("{base}/api/workspaces/{id}/papers"))
             .json(&serde_json::json!({"paper": paper, "note": "đọc kỹ phần phương pháp"}))
-            .send().await.unwrap().status().is_success());
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
         let papers: serde_json::Value = client
             .get(format!("{base}/api/workspaces/{id}/papers"))
-            .send().await.unwrap().json().await.unwrap();
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(papers.as_array().unwrap().len(), 1);
         assert_eq!(papers[0]["note"], "đọc kỹ phần phương pháp");
         assert_eq!(papers[0]["paper"]["title"], "Paper");
@@ -483,19 +830,102 @@ mod search_settings_tests {
             .send().await.unwrap().status().is_success());
         let papers: serde_json::Value = client
             .get(format!("{base}/api/workspaces/{id}/papers"))
-            .send().await.unwrap().json().await.unwrap();
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
         assert_eq!(papers[0]["note"], "cập nhật");
         assert_eq!(papers[0]["status"], "read");
         assert_eq!(papers[0]["favorite"], true);
         assert_eq!(papers[0]["tags"][1], "b");
-        assert!(client.delete(format!("{base}/api/workspaces/{id}")).send().await.unwrap().status().is_success());
+        assert!(client
+            .delete(format!("{base}/api/workspaces/{id}"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
 
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn interest_library_rest_round_trip_over_tcp() {
+        let app = gateway_router(AppState {
+            db: crate::db::Database::in_memory().unwrap(),
+            engine: Arc::new(AcademicEngine::new()),
+            port: 0,
+            mcp_sessions: Default::default(),
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::new();
+        let paper = serde_json::json!({"id":"interest-1","title":"Interesting paper","authors":[],"source":"Crossref","open_access":false});
+
+        assert!(client
+            .post(format!("{base}/api/library"))
+            .json(&serde_json::json!({"paper":paper}))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        let items: serde_json::Value = client
+            .get(format!("{base}/api/library"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(items.as_array().unwrap().len(), 1);
+        assert_eq!(items[0]["paper"]["id"], "interest-1");
+
+        assert!(client
+            .patch(format!("{base}/api/library?paper_id=interest-1"))
+            .json(&serde_json::json!({"note":"review later","status":"reading"}))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        let items: serde_json::Value = client
+            .get(format!("{base}/api/library"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(items[0]["note"], "review later");
+        assert_eq!(items[0]["status"], "reading");
+
+        assert!(client
+            .delete(format!("{base}/api/library?paper_id=interest-1"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success());
+        let items: serde_json::Value = client
+            .get(format!("{base}/api/library"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(items.as_array().unwrap().is_empty());
         server.abort();
     }
 
     #[test]
     fn resolves_changed_settings_and_explicit_empty_sources() {
-        let request: SearchRequest = serde_json::from_value(serde_json::json!({"query":"education"})).unwrap();
+        let request: SearchRequest =
+            serde_json::from_value(serde_json::json!({"query":"education"})).unwrap();
         let mut economics = request.clone();
         apply_search_defaults(&mut economics, |key| match key {
             "domain_preset" => Some("economics".into()),
@@ -511,7 +941,10 @@ mod search_settings_tests {
             _ => None,
         });
         assert_eq!(custom.sources, Some(vec![]));
-        assert_ne!(serde_json::to_string(&custom).unwrap(), serde_json::to_string(&economics).unwrap());
+        assert_ne!(
+            serde_json::to_string(&custom).unwrap(),
+            serde_json::to_string(&economics).unwrap()
+        );
         custom.limit = Some(7);
         apply_search_defaults(&mut custom, |_| Some("all".into()));
         assert_eq!(custom.sources, Some(vec![]));
@@ -533,6 +966,7 @@ fn probe_query(source: &crate::catalog::Source) -> &'static str {
         "sec_edgar" => "annual report",
         "stackexchange" => "python",
         "hf_datasets" | "huggingface" => "language model",
+        "eric" => "education",
         "world_bank" => "poverty",
         _ => match source.group.as_str() {
             "Vietnamese Journals" => "nghiên cứu",
@@ -593,11 +1027,12 @@ async fn source_check_handler(
     let timeout = crate::config::search_timeout(&state.db);
     let creds = state.db.source_credentials();
     let started = Instant::now();
+    let proxy = crate::config::outbound_proxy(&state.db);
     let custom_engine;
-    let engine = if timeout == 12 {
+    let engine = if timeout == 12 && proxy.is_none() {
         state.engine.as_ref()
     } else {
-        custom_engine = AcademicEngine::with_timeout(timeout);
+        custom_engine = AcademicEngine::with_options(timeout, proxy.as_deref());
         &custom_engine
     };
     let response = Box::pin(engine.search_candidates(&req, &creds)).await;
@@ -634,19 +1069,27 @@ async fn source_check_handler(
     )
 }
 
-pub(crate) async fn search_handler(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Json(payload): Json<SearchRequest>,
-) -> (StatusCode, Json<SearchResponse>) {
+/// Runs a search: validation, settings resolution, cache, fan-out, telemetry.
+///
+/// Transport-free on purpose. REST and MCP are two front doors onto the same
+/// search, and MCP used to reach it by calling the Axum handler with hand-built
+/// `State`/`Json` wrappers — which meant the HTTP extractor types leaked into
+/// the MCP layer for no reason. Both now call this.
+pub(crate) async fn search_service(
+    state: &AppState,
+    headers: &HeaderMap,
+    payload: SearchRequest,
+) -> (StatusCode, SearchResponse) {
     let started = Instant::now();
-    let principal = crate::agents::authenticate(&state.db, &headers);
+    let principal = crate::agents::authenticate(&state.db, headers);
     let agent_name = match &principal {
         Ok(crate::agents::Principal::Agent(grant)) => format!("Agent · {}", grant.name),
         _ => client_label(&headers),
     };
     let record_history = match &principal {
-        Ok(crate::agents::Principal::Agent(grant)) => grant.writable && payload.workspace_id.is_some(),
+        Ok(crate::agents::Principal::Agent(grant)) => {
+            grant.writable && payload.workspace_id.is_some()
+        }
         _ => true,
     };
 
@@ -679,13 +1122,17 @@ pub(crate) async fn search_handler(
     if invalid_source
         || search_req.query.is_empty()
         || matches!((search_req.year_min, search_req.year_max), (Some(min), Some(max)) if min > max)
-        || search_req.year_min.is_some_and(|year| !(1000..=9999).contains(&year))
-        || search_req.year_max.is_some_and(|year| !(1000..=9999).contains(&year))
+        || search_req
+            .year_min
+            .is_some_and(|year| !(1000..=9999).contains(&year))
+        || search_req
+            .year_max
+            .is_some_and(|year| !(1000..=9999).contains(&year))
         || search_req.offset.is_some_and(|offset| offset > 10_000)
     {
         return (
             StatusCode::BAD_REQUEST,
-            Json(SearchResponse {
+            SearchResponse {
                 query: String::new(),
                 total: 0,
                 available_total: 0,
@@ -693,7 +1140,7 @@ pub(crate) async fn search_handler(
                 cache_hit: false,
                 papers: vec![],
                 sources: vec![],
-            }),
+            },
         );
     }
 
@@ -735,25 +1182,34 @@ pub(crate) async fn search_handler(
             latency_ms: elapsed,
             status: "Cache Hit (200 OK)".to_string(),
         });
-        if record_history { state.db.add_search_history(&SearchHistoryItem {
-            id: uuid::Uuid::new_v4().to_string(),
-            query: search_req.query.clone(),
-            sources: search_req
-                .sources
-                .as_ref()
-                .map(|sources| sources.join(", ")),
-            result_count: cached.papers.len(),
-            elapsed_ms: elapsed,
-            created_at: now_sec,
-            workspace_id: search_req.workspace_id.clone(),
-            saved: false,
-        }); }
-        return (StatusCode::OK, Json(cached));
+        if record_history {
+            state.db.add_search_history(&SearchHistoryItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                query: search_req.query.clone(),
+                sources: search_req
+                    .sources
+                    .as_ref()
+                    .map(|sources| sources.join(", ")),
+                result_count: cached.papers.len(),
+                elapsed_ms: elapsed,
+                created_at: now_sec,
+                workspace_id: search_req.workspace_id.clone(),
+                saved: false,
+            });
+        }
+        return (StatusCode::OK, cached);
     }
 
+    // Cache misses fan out to third-party APIs. Keep rapid UI/MCP requests from
+    // starting overlapping search storms while allowing cached pagination now.
+    wait_for_search_slot(crate::config::search_delay(&state.db)).await;
+
+    let proxy = crate::config::outbound_proxy(&state.db);
     let custom_engine;
-    let engine = if timeout == 12 { state.engine.as_ref() } else {
-        custom_engine = AcademicEngine::with_timeout(timeout);
+    let engine = if timeout == 12 && proxy.is_none() {
+        state.engine.as_ref()
+    } else {
+        custom_engine = AcademicEngine::with_options(timeout, proxy.as_deref());
         &custom_engine
     };
     // The fan-out future is large (one branch per source); box it so it lives on
@@ -779,18 +1235,30 @@ pub(crate) async fn search_handler(
     });
 
     // Record search history
-    if record_history { state.db.add_search_history(&SearchHistoryItem {
-        id: uuid::Uuid::new_v4().to_string(),
-        query: search_req.query.clone(),
-        sources: search_req.sources.as_ref().map(|s| s.join(", ")),
-        result_count: resp.papers.len(),
-        elapsed_ms: elapsed,
-        created_at: now_sec,
-        workspace_id: search_req.workspace_id.clone(),
+    if record_history {
+        state.db.add_search_history(&SearchHistoryItem {
+            id: uuid::Uuid::new_v4().to_string(),
+            query: search_req.query.clone(),
+            sources: search_req.sources.as_ref().map(|s| s.join(", ")),
+            result_count: resp.papers.len(),
+            elapsed_ms: elapsed,
+            created_at: now_sec,
+            workspace_id: search_req.workspace_id.clone(),
             saved: false,
-    }); }
+        });
+    }
 
-    (StatusCode::OK, Json(resp))
+    (StatusCode::OK, resp)
+}
+
+/// REST front door for [`search_service`].
+pub(crate) async fn search_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Json(payload): Json<SearchRequest>,
+) -> (StatusCode, Json<SearchResponse>) {
+    let (status, response) = search_service(&state, &headers, payload).await;
+    (status, Json(response))
 }
 
 // Handler 3: Get paper by ID
@@ -800,7 +1268,10 @@ async fn paper_handler(
 ) -> (StatusCode, Json<serde_json::Value>) {
     match crate::details::lookup(&state, &id).await {
         Ok(paper) => (StatusCode::OK, Json(serde_json::to_value(paper).unwrap())),
-        Err((status, message)) => (StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), Json(serde_json::json!({"error":message}))),
+        Err((status, message)) => (
+            StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+            Json(serde_json::json!({"error":message})),
+        ),
     }
 }
 
@@ -814,7 +1285,10 @@ async fn citations_handler(
     let limit = params.limit.unwrap_or(20).clamp(1, 50);
     match crate::citations::lookup(&state, &id, direction, limit).await {
         Ok(value) => (StatusCode::OK, Json(value)),
-        Err((status, message)) => (StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), Json(serde_json::json!({"error": message}))),
+        Err((status, message)) => (
+            StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+            Json(serde_json::json!({"error": message})),
+        ),
     }
 }
 
@@ -826,7 +1300,10 @@ async fn citations_query_handler(
     let limit = params.limit.unwrap_or(20).clamp(1, 50);
     match crate::citations::lookup(&state, &params.id, direction, limit).await {
         Ok(value) => (StatusCode::OK, Json(value)),
-        Err((status, message)) => (StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), Json(serde_json::json!({"error": message}))),
+        Err((status, message)) => (
+            StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+            Json(serde_json::json!({"error": message})),
+        ),
     }
 }
 
@@ -837,7 +1314,14 @@ async fn download_handler(
 ) -> Json<DownloadResponse> {
     let download_dir = match crate::config::download_directory(&state.db) {
         Ok(path) => path,
-        Err(error) => return Json(DownloadResponse { success: false, local_path: None, file_size_bytes: None, error: Some(error) }),
+        Err(error) => {
+            return Json(DownloadResponse {
+                success: false,
+                local_path: None,
+                file_size_bytes: None,
+                error: Some(error),
+            })
+        }
     };
 
     let clean_title: String = payload
@@ -857,7 +1341,7 @@ async fn download_handler(
     } else {
         clean_title.trim()
     };
-    let url_hash = format!("{:x}", md5::compute(payload.pdf_url.as_bytes()));
+    let url_hash = content_hash(payload.pdf_url.as_bytes());
     let file_name = format!("{}_{}.pdf", title, &url_hash[..8]);
     let target_file = download_dir.join(&file_name);
 
@@ -1074,15 +1558,85 @@ async fn get_search_history_handler(
     State(state): State<AppState>,
     Query(params): Query<HistoryQuery>,
 ) -> Json<Vec<SearchHistoryItem>> {
-    let history = state.db.get_search_history(100, params.workspace_id.as_deref());
+    let history = state
+        .db
+        .get_search_history(100, params.workspace_id.as_deref());
     Json(history)
 }
 
-// ---- Workspaces -----------------------------------------------------------
+// ---- Interest library ----------------------------------------------------
 
-async fn list_workspaces_handler(headers: HeaderMap, State(state): State<AppState>) -> Json<Vec<Workspace>> {
+async fn list_library_handler(
+    State(state): State<AppState>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    match state.db.library_papers() {
+        Ok(papers) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(papers).unwrap_or_default()),
+        ),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": error })),
+        ),
+    }
+}
+
+async fn add_library_paper_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<WorkspacePaperRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    match state.db.add_library_paper(&payload.paper) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        ),
+    }
+}
+
+async fn update_library_paper_handler(
+    State(state): State<AppState>,
+    Query(params): Query<WorkspacePaperQuery>,
+    Json(payload): Json<UpdateWorkspacePaperRequest>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    match state.db.update_library_paper(
+        &params.paper_id,
+        payload.note.as_deref(),
+        payload.status.as_deref(),
+        payload.favorite,
+        payload.tags.as_deref(),
+    ) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        ),
+    }
+}
+
+async fn remove_library_paper_handler(
+    State(state): State<AppState>,
+    Query(params): Query<WorkspacePaperQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    match state.db.remove_library_paper(&params.paper_id) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": error })),
+        ),
+    }
+}
+
+// ---- Legacy workspaces (kept for existing MCP clients) ------------------
+
+async fn list_workspaces_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Json<Vec<Workspace>> {
     let mut workspaces = state.db.list_workspaces();
-    if let Ok(crate::agents::Principal::Agent(grant)) = crate::agents::authenticate(&state.db, &headers) {
+    if let Ok(crate::agents::Principal::Agent(grant)) =
+        crate::agents::authenticate(&state.db, &headers)
+    {
         workspaces.retain(|w| crate::agents::workspace_allowed(&grant, &w.id, false));
     }
     Json(workspaces)
@@ -1092,9 +1646,18 @@ async fn create_workspace_handler(
     State(state): State<AppState>,
     Json(payload): Json<CreateWorkspaceRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    match state.db.create_workspace(&payload.name, payload.description.as_deref()) {
-        Ok(workspace) => (StatusCode::OK, Json(serde_json::to_value(workspace).unwrap())),
-        Err(error) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": error }))),
+    match state
+        .db
+        .create_workspace(&payload.name, payload.description.as_deref())
+    {
+        Ok(workspace) => (
+            StatusCode::OK,
+            Json(serde_json::to_value(workspace).unwrap()),
+        ),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        ),
     }
 }
 
@@ -1103,14 +1666,28 @@ async fn update_workspace_handler(
     State(state): State<AppState>,
     Json(payload): Json<UpdateWorkspaceRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    let Some(existing) = state.db.list_workspaces().into_iter().find(|workspace| workspace.id == id) else {
-        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Workspace not found" })));
+    let Some(existing) = state
+        .db
+        .list_workspaces()
+        .into_iter()
+        .find(|workspace| workspace.id == id)
+    else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Workspace not found" })),
+        );
     };
     let name = payload.name.unwrap_or(existing.name);
     let description = payload.description.or(existing.description);
-    match state.db.rename_workspace(&id, &name, description.as_deref()) {
+    match state
+        .db
+        .rename_workspace(&id, &name, description.as_deref())
+    {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
-        Err(error) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": error }))),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        ),
     }
 }
 
@@ -1120,7 +1697,10 @@ async fn delete_workspace_handler(
 ) -> (StatusCode, Json<serde_json::Value>) {
     match state.db.delete_workspace(&id) {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
-        Err(error) => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": error }))),
+        Err(error) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": error })),
+        ),
     }
 }
 
@@ -1129,11 +1709,17 @@ async fn list_workspace_papers_handler(
     State(state): State<AppState>,
 ) -> (StatusCode, Json<serde_json::Value>) {
     if !state.db.workspace_exists(&id) {
-        return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Workspace not found" })));
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "Workspace not found" })),
+        );
     }
     match state.db.workspace_papers(&id) {
         Ok(papers) => (StatusCode::OK, Json(serde_json::to_value(papers).unwrap())),
-        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": error }))),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": error })),
+        ),
     }
 }
 
@@ -1142,9 +1728,15 @@ async fn add_workspace_paper_handler(
     State(state): State<AppState>,
     Json(payload): Json<WorkspacePaperRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    match state.db.add_workspace_paper(&id, &payload.paper, payload.note.as_deref()) {
+    match state
+        .db
+        .add_workspace_paper(&id, &payload.paper, payload.note.as_deref())
+    {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
-        Err(error) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": error }))),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        ),
     }
 }
 
@@ -1163,7 +1755,10 @@ async fn update_workspace_note_handler(
         payload.tags.as_deref(),
     ) {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
-        Err(error) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": error }))),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": error })),
+        ),
     }
 }
 
@@ -1188,7 +1783,26 @@ async fn remove_workspace_paper_handler(
 ) -> (StatusCode, Json<serde_json::Value>) {
     match state.db.remove_workspace_paper(&id, &params.paper_id) {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
-        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": error }))),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": error })),
+        ),
+    }
+}
+
+async fn clear_download_history_handler(
+    State(state): State<AppState>,
+    Query(params): Query<HistoryQuery>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    match state
+        .db
+        .clear_download_history(params.workspace_id.as_deref())
+    {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "success": false, "error": error.to_string() })),
+        ),
     }
 }
 
@@ -1196,7 +1810,10 @@ async fn clear_search_history_handler(
     State(state): State<AppState>,
     Query(params): Query<HistoryQuery>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    match state.db.clear_search_history(params.workspace_id.as_deref()) {
+    match state
+        .db
+        .clear_search_history(params.workspace_id.as_deref())
+    {
         Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "success": true }))),
         Err(error) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1223,7 +1840,11 @@ async fn get_download_history_handler(
     State(state): State<AppState>,
     Query(params): Query<HistoryQuery>,
 ) -> Json<Vec<DownloadRecord>> {
-    Json(state.db.get_download_history(params.workspace_id.as_deref()))
+    Json(
+        state
+            .db
+            .get_download_history(params.workspace_id.as_deref()),
+    )
 }
 
 async fn delete_download_handler(
@@ -1265,9 +1886,18 @@ async fn open_file_handler(Json(payload): Json<OpenFileRequest>) -> Json<serde_j
 }
 
 // Handler 9: Configuration (LLM Keys & Academic Providers)
-async fn get_config_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn get_config_handler(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Json<serde_json::Value> {
     // Secrets never leave the process: stored credentials become a sentinel the
     // UI can echo back unchanged.
+    if !matches!(
+        crate::agents::authenticate(&state.db, &headers),
+        Ok(crate::agents::Principal::Local | crate::agents::Principal::Admin)
+    ) {
+        return Json(serde_json::json!({"authentication_required":true}));
+    }
     let config = crate::config::sanitize_config(state.db.get_all_config());
     Json(config)
 }
@@ -1278,10 +1908,18 @@ async fn set_config_handler(
 ) -> (StatusCode, Json<serde_json::Value>) {
     let values = match crate::config::validate_patch(payload) {
         Ok(values) => values,
-        Err(error) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"success":false,"error":error}))),
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"success":false,"error":error})),
+            )
+        }
     };
     if let Err(error) = state.db.set_config_patch(&values) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"success":false,"error":error.to_string()})));
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"success":false,"error":error.to_string()})),
+        );
     }
     (StatusCode::OK, Json(serde_json::json!({"success":true})))
 }
@@ -1461,6 +2099,28 @@ async fn test_llm_handler(
                 }),
             }
         }
+        "groq" => {
+            let url = "https://api.groq.com/openai/v1/models";
+            match client.get(url).bearer_auth(&payload.api_key).send().await {
+                Ok(resp) => {
+                    let elapsed = started.elapsed().as_millis() as u64;
+                    Json(TestLlmResponse {
+                        success: resp.status().is_success(),
+                        latency_ms: elapsed,
+                        message: if resp.status().is_success() {
+                            "Groq API key verified successfully!".to_string()
+                        } else {
+                            format!("Groq returned status: {}", resp.status())
+                        },
+                    })
+                }
+                Err(e) => Json(TestLlmResponse {
+                    success: false,
+                    latency_ms: started.elapsed().as_millis() as u64,
+                    message: format!("Connection error: {}", e),
+                }),
+            }
+        }
         "ollama" => {
             let base_url = payload
                 .base_url
@@ -1470,10 +2130,48 @@ async fn test_llm_handler(
                 Ok(resp) => {
                     let elapsed = started.elapsed().as_millis() as u64;
                     if resp.status().is_success() {
+                        let configured = payload
+                            .model
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|model| !model.is_empty());
+                        let found = match configured {
+                            Some(model) => {
+                                resp.json::<serde_json::Value>()
+                                    .await
+                                    .ok()
+                                    .is_some_and(|body| {
+                                        body["models"].as_array().is_some_and(|models| {
+                                            models.iter().any(|item| {
+                                                item["name"].as_str().is_some_and(|name| {
+                                                    name == model
+                                                        || name.strip_suffix(":latest")
+                                                            == Some(model)
+                                                })
+                                            })
+                                        })
+                                    })
+                            }
+                            None => true,
+                        };
                         Json(TestLlmResponse {
-                            success: true,
+                            success: found,
                             latency_ms: elapsed,
-                            message: "Local Ollama server is ONLINE & responsive!".to_string(),
+                            message: if found {
+                                configured.map_or_else(
+                                    || "Local Ollama server is online and responsive.".to_string(),
+                                    |model| {
+                                        format!(
+                                            "Ollama is online and model '{model}' is installed."
+                                        )
+                                    },
+                                )
+                            } else {
+                                format!(
+                                    "Ollama is online, but model '{}' is not installed.",
+                                    configured.unwrap()
+                                )
+                            },
                         })
                     } else {
                         Json(TestLlmResponse {

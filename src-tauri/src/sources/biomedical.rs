@@ -21,7 +21,12 @@ pub async fn search_clinicaltrials(
         .header("User-Agent", "ScholarGateway-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("clinicaltrials: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "clinicaltrials: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("clinicaltrials: HTTP {}", res.status()));
@@ -143,7 +148,13 @@ pub async fn search_biorxiv_medrxiv(
         .header("User-Agent", "ScholarGateway-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("{}: request failed — {}", source_id, crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "{}: request failed — {}",
+                source_id,
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("{}: HTTP {}", source_id, res.status()));
@@ -201,11 +212,17 @@ pub async fn search_biorxiv_medrxiv(
                 .and_then(|y| y.as_u64())
                 .map(|y| y as u32);
 
-            let pdf_url = doi.as_ref().map(|d| format!("https://www.biorxiv.org/content/{}.full.pdf", d));
+            let pdf_url = doi
+                .as_ref()
+                .map(|d| format!("https://www.biorxiv.org/content/{}.full.pdf", d));
             let source_url = doi
                 .as_ref()
                 .map(|d| format!("https://doi.org/{}", d))
-                .or_else(|| item.get("URL").and_then(|v| v.as_str()).map(|s| s.to_string()));
+                .or_else(|| {
+                    item.get("URL")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                });
 
             let venue = if source_id == "medrxiv" {
                 "medRxiv Preprints"
@@ -252,7 +269,12 @@ pub async fn search_plos(
         .header("User-Agent", "ScholarGateway-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("plos: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "plos: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("plos: HTTP {}", res.status()));
@@ -276,8 +298,14 @@ pub async fn search_plos(
             }
 
             let doi = doc.get("id").and_then(|v| v.as_str()).unwrap_or("");
-            let title = doc.get("title").and_then(|v| v.as_str()).unwrap_or("(untitled)");
-            let venue = doc.get("journal").and_then(|v| v.as_str()).unwrap_or("PLOS");
+            let title = doc
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("(untitled)");
+            let venue = doc
+                .get("journal")
+                .and_then(|v| v.as_str())
+                .unwrap_or("PLOS");
 
             let authors = doc
                 .get("author_display")
@@ -304,7 +332,10 @@ pub async fn search_plos(
                 .map(clean_html_text);
 
             let source_url = format!("https://doi.org/{}", doi);
-            let pdf_url = format!("https://journals.plos.org/plosone/article/file?id={}&type=printable", doi);
+            let pdf_url = format!(
+                "https://journals.plos.org/plosone/article/file?id={}&type=printable",
+                doi
+            );
 
             papers.push(Paper {
                 id: format!("plos:{}", doi),
@@ -360,11 +391,7 @@ pub async fn search_pmc(
         .get("esearchresult")
         .and_then(|r| r.get("idlist"))
         .and_then(|l| l.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str())
-                .collect::<Vec<_>>()
-        })
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
         .unwrap_or_default();
 
     if id_list.is_empty() {
@@ -397,7 +424,9 @@ pub async fn search_pmc(
 
     if let Some(res_map) = result_obj {
         for id in id_list {
-            let Some(item) = res_map.get(id) else { continue };
+            let Some(item) = res_map.get(id) else {
+                continue;
+            };
             let title = item
                 .get("title")
                 .and_then(|v| v.as_str())
@@ -429,7 +458,8 @@ pub async fn search_pmc(
                 .get("articleids")
                 .and_then(|a| a.as_array())
                 .and_then(|arr| {
-                    arr.iter().find(|x| x.get("idtype").and_then(|t| t.as_str()) == Some("doi"))
+                    arr.iter()
+                        .find(|x| x.get("idtype").and_then(|t| t.as_str()) == Some("doi"))
                 })
                 .and_then(|d| d.get("value"))
                 .and_then(|v| v.as_str())

@@ -63,8 +63,6 @@ export const CockpitDashboard: React.FC<CockpitDashboardProps> = ({
             cfg.enabled_sources
               .split(',')
               .map((s: string) => s.trim().toLowerCase())
-              .map((s: string) => (s === 'vjol' ? 'vietnam' : s))
-              .map((s: string) => (s === 'searxng' ? 'metasearch' : s))
               .filter(Boolean)
           );
         } else setEnabledSources(searchCatalog.presets.find((item) => item.id === preset)?.sources ?? []);

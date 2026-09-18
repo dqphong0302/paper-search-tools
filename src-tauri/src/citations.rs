@@ -69,7 +69,11 @@ async fn get_json(client: &reqwest::Client, url: &str) -> Result<Value, (u16, St
         return Err((502, format!("OpenAlex HTTP {}", response.status())));
     }
     let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|error| (502, error.to_string()))? {
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| (502, error.to_string()))?
+    {
         if bytes.len() + chunk.len() > MAX_BYTES {
             return Err((502, "Metadata exceeds the 4 MiB limit".into()));
         }
@@ -97,8 +101,10 @@ pub async fn lookup(
     direction: &str,
     limit: usize,
 ) -> Result<Value, (u16, String)> {
-    let path = work_path(id)
-        .ok_or((404, "A DOI, PMID or OpenAlex id is required to look up citations".to_string()))?;
+    let path = work_path(id).ok_or((
+        404,
+        "A DOI, PMID or OpenAlex id is required to look up citations".to_string(),
+    ))?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(12))
         .user_agent("ScholarGateway-Desktop/1.0 (mailto:dqphong0302@gmail.com)")
@@ -107,15 +113,28 @@ pub async fn lookup(
     let limit = limit.clamp(1, 50);
 
     let mut query: Vec<(&str, String)> = Vec::new();
-    if let Some(email) = state.db.get_config("openalex_email").filter(|value| !value.trim().is_empty()) {
+    if let Some(email) = state
+        .db
+        .get_config("openalex_email")
+        .filter(|value| !value.trim().is_empty())
+    {
         query.push(("mailto", email));
     }
-    if let Some(key) = state.db.get_config("openalex_api_key").filter(|value| !value.trim().is_empty()) {
+    if let Some(key) = state
+        .db
+        .get_config("openalex_api_key")
+        .filter(|value| !value.trim().is_empty())
+    {
         query.push(("api_key", key));
     }
 
     let work = get_json(&client, &format!("{path}{}", build_query(&query))).await?;
-    let Some(work_id) = work.get("id").and_then(Value::as_str).and_then(short_id).map(str::to_string) else {
+    let Some(work_id) = work
+        .get("id")
+        .and_then(Value::as_str)
+        .and_then(short_id)
+        .map(str::to_string)
+    else {
         return Err((404, "Could not resolve an OpenAlex work id".into()));
     };
 
@@ -130,14 +149,29 @@ pub async fn lookup(
         params.push(("filter", format!("cites:{work_id}")));
         params.push(("per-page", limit.to_string()));
         params.push(("sort", "cited_by_count:desc".into()));
-        let json = get_json(&client, &format!("https://api.openalex.org/works{}", build_query(&params))).await?;
+        let json = get_json(
+            &client,
+            &format!("https://api.openalex.org/works{}", build_query(&params)),
+        )
+        .await?;
         parse_items(&json, limit)
     } else {
-        let field = if direction == "related" { "related_works" } else { "referenced_works" };
+        let field = if direction == "related" {
+            "related_works"
+        } else {
+            "referenced_works"
+        };
         let ids: Vec<String> = work
             .get(field)
             .and_then(Value::as_array)
-            .map(|values| values.iter().filter_map(Value::as_str).filter_map(short_id).map(str::to_string).collect())
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .filter_map(short_id)
+                    .map(str::to_string)
+                    .collect()
+            })
             .unwrap_or_default();
         if ids.is_empty() {
             Vec::new()
@@ -146,7 +180,11 @@ pub async fn lookup(
             let joined = ids.into_iter().take(limit).collect::<Vec<_>>().join("|");
             params.push(("filter", format!("openalex_id:{joined}")));
             params.push(("per-page", limit.to_string()));
-            let json = get_json(&client, &format!("https://api.openalex.org/works{}", build_query(&params))).await?;
+            let json = get_json(
+                &client,
+                &format!("https://api.openalex.org/works{}", build_query(&params)),
+            )
+            .await?;
             parse_items(&json, limit)
         }
     };
@@ -165,10 +203,22 @@ mod tests {
 
     #[test]
     fn resolves_known_identifier_forms_only() {
-        assert_eq!(work_path("10.1038/NATURE14539").as_deref(), Some("https://api.openalex.org/works/doi:10.1038/nature14539"));
-        assert_eq!(work_path("pmid:26017442").as_deref(), Some("https://api.openalex.org/works/pmid:26017442"));
-        assert_eq!(work_path("W2154910403").as_deref(), Some("https://api.openalex.org/works/W2154910403"));
-        assert_eq!(work_path("vn:https://openalex.org/W123").as_deref(), Some("https://openalex.org/W123"));
+        assert_eq!(
+            work_path("10.1038/NATURE14539").as_deref(),
+            Some("https://api.openalex.org/works/doi:10.1038/nature14539")
+        );
+        assert_eq!(
+            work_path("pmid:26017442").as_deref(),
+            Some("https://api.openalex.org/works/pmid:26017442")
+        );
+        assert_eq!(
+            work_path("W2154910403").as_deref(),
+            Some("https://api.openalex.org/works/W2154910403")
+        );
+        assert_eq!(
+            work_path("vn:https://openalex.org/W123").as_deref(),
+            Some("https://openalex.org/W123")
+        );
         assert!(work_path("unknown-id").is_none());
     }
 

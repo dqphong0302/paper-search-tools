@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { gatewayFetch, gatewayUrl } from '../lib/gateway';
-import { Workspace } from '../types';
 
 interface AgentGrant {
   id: string;
@@ -29,8 +28,6 @@ async function readResponse<T>(response: Response): Promise<T> {
 
 export const AgentAccess: React.FC = () => {
   const [agents, setAgents] = useState<AgentGrant[]>([]);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selected, setSelected] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [writable, setWritable] = useState(false);
   const [created, setCreated] = useState<CreatedAgent | null>(null);
@@ -42,13 +39,9 @@ export const AgentAccess: React.FC = () => {
   const mounted = useRef(true);
 
   const refresh = useCallback(async () => {
-    const [grants, projects] = await Promise.all([
-      gatewayFetch('/api/agents').then(readResponse<AgentGrant[]>),
-      gatewayFetch('/api/workspaces').then(readResponse<Workspace[]>),
-    ]);
+    const grants = await gatewayFetch('/api/agents').then(readResponse<AgentGrant[]>);
     if (!mounted.current) return;
-    setAgents(grants); setWorkspaces(projects); setReady(true);
-    setSelected(ids => ids.filter(id => projects.some(project => project.id === id)));
+    setAgents(grants); setReady(true);
   }, []);
 
   const perform = async (action: () => Promise<void>) => {
@@ -68,7 +61,7 @@ export const AgentAccess: React.FC = () => {
     void perform(async () => {
       const result = await readResponse<CreatedAgent>(await gatewayFetch('/api/agents', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), workspace_ids: selected, writable }),
+        body: JSON.stringify({ name: name.trim(), workspace_ids: [], writable }),
       }));
       if (!mounted.current) return;
       setCreated(result); setName('');
@@ -81,12 +74,12 @@ export const AgentAccess: React.FC = () => {
     const response = await fetch(gatewayUrl('/mcp'), {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${created.token}` },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
-        name: 'get_workspace', arguments: { workspace_id: created.agent.workspace_ids[0], limit: 1, fields: [] },
+        name: 'list_interested_papers', arguments: { limit: 1, fields: [] },
       } }),
     });
     const result = await readResponse<{ error?: { message?: string }; result?: { isError?: boolean } }>(response);
-    if (result.error || !result.result || result.result.isError) throw new Error('Workspace access check failed. Check the token and project.');
-    setMessage('Connected. Project access verified.');
+    if (result.error || !result.result || result.result.isError) throw new Error('Library access check failed. Check the token and permission.');
+    setMessage('Connected. Interest library access verified.');
   });
 
   return <section className="page-container" aria-labelledby="agent-access-title">
@@ -105,13 +98,8 @@ export const AgentAccess: React.FC = () => {
         <select id="agent-permission" className="field-input" value={writable ? 'write' : 'read'} onChange={e => setWritable(e.target.value === 'write')}>
           <option value="read">Read only</option><option value="write">Read & write</option>
         </select>
-        <fieldset style={{ border: 0, display: 'grid', gap: 8 }}><legend>Projects</legend>
-          {workspaces.map(workspace => <label key={workspace.id} htmlFor={`agent-workspace-${workspace.id}`}>
-            <input id={`agent-workspace-${workspace.id}`} type="checkbox" checked={selected.includes(workspace.id)}
-              onChange={e => setSelected(ids => e.target.checked ? [...ids, workspace.id] : ids.filter(id => id !== workspace.id))} /> {workspace.name}
-          </label>)}
-        </fieldset>
-        <button id="agent-create" className="action-btn action-btn-primary" type="submit" disabled={!name.trim() || !selected.length}>Create connection</button>
+        <p>This connection can access the interest library.</p>
+        <button id="agent-create" className="action-btn action-btn-primary" type="submit" disabled={!name.trim()}>Create connection</button>
       </fieldset>
     </form>
     {created && <section className="cockpit-card agent-access-token" aria-label="New agent token" style={{ display: 'grid', gap: 10 }}>
@@ -121,7 +109,7 @@ export const AgentAccess: React.FC = () => {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <button id="agent-copy-config" className="action-btn" disabled={busy} onClick={() => void perform(async () => {
           await navigator.clipboard.writeText(JSON.stringify({ mcpServers: { scholargateway: {
-            url: gatewayUrl('/mcp'), headers: { Authorization: `Bearer ${created.token}` },
+            type: 'http', url: gatewayUrl('/mcp'), headers: { Authorization: `Bearer ${created.token}` },
           } } }, null, 2));
           setMessage('MCP configuration copied. Keep it private.');
         })}>Copy MCP config</button>
@@ -135,7 +123,7 @@ export const AgentAccess: React.FC = () => {
       {!agents.length && <p>No connections yet.</p>}
       {agents.map(agent => <article key={agent.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--cockpit-border)' }}>
         <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}><h3>{agent.name}</h3>
-          <p>{agent.revoked ? 'Revoked' : agent.writable ? 'Read & write' : 'Read only'} · {agent.workspace_ids.map(id => workspaces.find(w => w.id === id)?.name || 'Removed project').join(', ')}</p>
+          <p>{agent.revoked ? 'Revoked' : agent.writable ? 'Read & write' : 'Read only'} · Interest library</p>
         </div>
         {!agent.revoked && <button id={`agent-revoke-${agent.id}`} className="action-btn" disabled={busy} onClick={() => {
           if (!window.confirm(`Revoke ${agent.name}? Its token will stop working.`)) return;

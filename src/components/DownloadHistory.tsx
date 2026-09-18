@@ -98,6 +98,23 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
     }
   };
 
+  const handleClearAll = async () => {
+    // Wording matters here: this forgets records, it does not touch the user's
+    // files. The single-record delete already makes the same promise.
+    if (!window.confirm(
+      `Clear all ${downloads.length} download records? The PDF files on disk are kept. This cannot be undone.`
+    )) return;
+    setError(null);
+    try {
+      const suffix = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+      const res = await gatewayFetch(`/api/history/downloads${suffix}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Server returned status code ${res.status}`);
+      setDownloads([]);
+    } catch (e) {
+      setError(`Failed to clear download history: ${(e as Error).message}`);
+    }
+  };
+
   const copyPath = (id: string, path: string) => {
     navigator.clipboard.writeText(path).then(() => {
       setCopiedId(id);
@@ -173,6 +190,18 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span>Sync</span>
           </button>
+
+          {downloads.length > 0 && (
+            <button
+              id="clear-download-history"
+              className="action-btn action-btn-danger"
+              onClick={handleClearAll}
+              title="Forget every download record (the PDF files on disk are kept)"
+            >
+              <Trash2 size={14} />
+              <span>Clear All</span>
+            </button>
+          )}
         </div>
       </div>
 

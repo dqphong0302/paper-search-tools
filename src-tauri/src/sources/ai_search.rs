@@ -11,10 +11,15 @@ pub async fn search_perplexity(
     base_url: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(key) = api_key else {
-        return Err(format!("{}perplexity: requires PERPLEXITY_API_KEY", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}perplexity: requires PERPLEXITY_API_KEY",
+            crate::sources::NEEDS_SETUP
+        ));
     };
 
-    let base = base_url.unwrap_or("https://api.perplexity.ai").trim_end_matches('/');
+    let base = base_url
+        .unwrap_or("https://api.perplexity.ai")
+        .trim_end_matches('/');
     let url = format!("{}/chat/completions", base);
 
     let system_prompt = "You are an academic literature search engine. Return up to 10 relevant peer-reviewed papers for the user's research query as a strict JSON array of objects with keys: title, authors (array), year (number), venue (string), abstract (string), doi (string or null), source_url (string or null). Only output the JSON array inside a json markdown fence.";
@@ -35,7 +40,12 @@ pub async fn search_perplexity(
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("perplexity: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "perplexity: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("perplexity: HTTP {}", res.status()));
@@ -82,10 +92,22 @@ pub async fn search_perplexity(
             break;
         }
 
-        let title = item.get("title").and_then(|v| v.as_str()).unwrap_or("(untitled)");
-        let venue = item.get("venue").and_then(|v| v.as_str()).unwrap_or("Perplexity Sonar Pro");
-        let doi = item.get("doi").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let source_url = item.get("source_url").and_then(|v| v.as_str()).map(|s| s.to_string())
+        let title = item
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(untitled)");
+        let venue = item
+            .get("venue")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Perplexity Sonar Pro");
+        let doi = item
+            .get("doi")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let source_url = item
+            .get("source_url")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
             .or_else(|| doi.as_ref().map(|d| format!("https://doi.org/{}", d)));
 
         let authors = item
@@ -98,14 +120,22 @@ pub async fn search_perplexity(
             })
             .unwrap_or_default();
 
-        let year = item
-            .get("year")
-            .and_then(|y| y.as_u64().map(|n| n as u32).or_else(|| y.as_str().and_then(|s| s.parse::<u32>().ok())));
+        let year = item.get("year").and_then(|y| {
+            y.as_u64()
+                .map(|n| n as u32)
+                .or_else(|| y.as_str().and_then(|s| s.parse::<u32>().ok()))
+        });
 
-        let abstract_text = item.get("abstract").and_then(|a| a.as_str()).map(clean_html_text);
+        let abstract_text = item
+            .get("abstract")
+            .and_then(|a| a.as_str())
+            .map(clean_html_text);
 
         papers.push(Paper {
-            id: format!("perplexity:{}", doi.as_deref().unwrap_or(&format!("p-{}", idx))),
+            id: format!(
+                "perplexity:{}",
+                doi.as_deref().unwrap_or(&format!("p-{}", idx))
+            ),
             title: clean_html_text(title),
             authors,
             year,
@@ -133,7 +163,10 @@ pub async fn search_consensus(
     session: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(sess) = session.map(str::trim).filter(|s| !s.is_empty()) else {
-        return Err(format!("{}consensus: requires consensus_session (sign in from Settings)", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}consensus: requires consensus_session (sign in from Settings)",
+            crate::sources::NEEDS_SETUP
+        ));
     };
 
     let url = "https://consensus.app/api/paper_search/";
@@ -155,13 +188,21 @@ pub async fn search_consensus(
     if sess.contains('=') || sess.contains(';') {
         req = req.header("Cookie", sess);
     } else {
-        req = req.header("Cookie", format!("__session={}", sess))
-                 .header("Authorization", format!("Bearer {}", sess));
+        req = req
+            .header("Cookie", format!("__session={}", sess))
+            .header("Authorization", format!("Bearer {}", sess));
     }
 
-    let res = req.send().await.map_err(|e| format!("consensus: request failed — {}", crate::sources::transport_reason(&e)))?;
+    let res = req.send().await.map_err(|e| {
+        format!(
+            "consensus: request failed — {}",
+            crate::sources::transport_reason(&e)
+        )
+    })?;
 
-    if res.status() == reqwest::StatusCode::UNAUTHORIZED || res.status() == reqwest::StatusCode::FORBIDDEN {
+    if res.status() == reqwest::StatusCode::UNAUTHORIZED
+        || res.status() == reqwest::StatusCode::FORBIDDEN
+    {
         return Err("consensus: session expired or invalid, please sign in again".to_string());
     }
 
@@ -169,9 +210,13 @@ pub async fn search_consensus(
         return Err(format!("consensus: HTTP {}", res.status()));
     }
 
-    let body: Value = res.json().await.map_err(|e| format!("consensus: json error: {}", e))?;
+    let body: Value = res
+        .json()
+        .await
+        .map_err(|e| format!("consensus: json error: {}", e))?;
 
-    let items = body.get("papers")
+    let items = body
+        .get("papers")
         .or_else(|| body.get("results"))
         .or_else(|| body.get("claims"))
         .and_then(|v| v.as_array())
@@ -190,9 +235,13 @@ pub async fn search_consensus(
             raw_item.clone()
         };
 
-        let title = p.get("title").and_then(|v| v.as_str()).unwrap_or("(untitled)");
+        let title = p
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(untitled)");
         let doi = p.get("doi").and_then(|v| v.as_str()).map(str::to_string);
-        let mut source_url = p.get("url")
+        let mut source_url = p
+            .get("url")
             .or_else(|| p.get("doi_url"))
             .or_else(|| p.get("paper_url"))
             .or_else(|| p.get("open_access_pdf_url"))
@@ -200,19 +249,24 @@ pub async fn search_consensus(
             .map(str::to_string);
 
         if source_url.is_none() {
-            if let (Some(slug), Some(id)) = (p.get("url_slug").and_then(|v| v.as_str()), p.get("paper_id").and_then(|v| v.as_str())) {
+            if let (Some(slug), Some(id)) = (
+                p.get("url_slug").and_then(|v| v.as_str()),
+                p.get("paper_id").and_then(|v| v.as_str()),
+            ) {
                 source_url = Some(format!("https://consensus.app/papers/{}/{}", slug, id));
             } else if let Some(ref d) = doi {
                 source_url = Some(format!("https://doi.org/{}", d));
             }
         }
 
-        let journal = p.get("journal")
+        let journal = p
+            .get("journal")
             .or_else(|| p.get("source_title"))
             .and_then(|v| v.as_str())
             .unwrap_or("Consensus.app");
 
-        let study_type = p.get("badges")
+        let study_type = p
+            .get("badges")
             .and_then(|b| b.get("study_type"))
             .or_else(|| p.get("study_type"))
             .and_then(|v| v.as_str())
@@ -224,14 +278,16 @@ pub async fn search_consensus(
             journal.to_string()
         };
 
-        let claim = p.get("display_text")
+        let claim = p
+            .get("display_text")
             .or_else(|| raw_item.get("claim"))
             .or_else(|| raw_item.get("text"))
             .or_else(|| p.get("claim"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        let mut abstract_text = p.get("abstract")
+        let mut abstract_text = p
+            .get("abstract")
             .or_else(|| p.get("summary"))
             .and_then(|v| v.as_str())
             .map(clean_html_text);
@@ -240,15 +296,22 @@ pub async fn search_consensus(
             abstract_text = Some(clean_html_text(claim));
         }
 
-        let year = p.get("year")
+        let year = p
+            .get("year")
             .or_else(|| p.get("publication_year"))
-            .and_then(|y| y.as_u64().map(|n| n as u32).or_else(|| y.as_str().and_then(|s| s.parse::<u32>().ok())));
+            .and_then(|y| {
+                y.as_u64()
+                    .map(|n| n as u32)
+                    .or_else(|| y.as_str().and_then(|s| s.parse::<u32>().ok()))
+            });
 
-        let citations = p.get("citation_count")
+        let citations = p
+            .get("citation_count")
             .or_else(|| p.get("citations"))
             .and_then(|c| c.as_u64().map(|n| n as u32));
 
-        let authors = p.get("authors")
+        let authors = p
+            .get("authors")
             .and_then(|a| a.as_array())
             .map(|arr| {
                 arr.iter()
@@ -265,7 +328,8 @@ pub async fn search_consensus(
             })
             .unwrap_or_default();
 
-        let id = doi.as_ref()
+        let id = doi
+            .as_ref()
             .map(|d| format!("doi:{}", d))
             .unwrap_or_else(|| format!("consensus:{}", idx));
 
@@ -298,7 +362,10 @@ pub async fn search_openevidence(
     session: Option<&str>,
 ) -> Result<Vec<Paper>, String> {
     let Some(sess) = session.map(str::trim).filter(|s| !s.is_empty()) else {
-        return Err(format!("{}openevidence: requires openevidence_session (sign in from Settings)", crate::sources::NEEDS_SETUP));
+        return Err(format!(
+            "{}openevidence: requires openevidence_session (sign in from Settings)",
+            crate::sources::NEEDS_SETUP
+        ));
     };
 
     let url = "https://www.openevidence.com/api/chat";
@@ -317,13 +384,21 @@ pub async fn search_openevidence(
     if sess.contains('=') || sess.contains(';') {
         req = req.header("Cookie", sess);
     } else {
-        req = req.header("Authorization", format!("Bearer {}", sess))
-                 .header("x-openevidence-key", sess);
+        req = req
+            .header("Authorization", format!("Bearer {}", sess))
+            .header("x-openevidence-key", sess);
     }
 
-    let res = req.send().await.map_err(|e| format!("openevidence: request failed — {}", crate::sources::transport_reason(&e)))?;
+    let res = req.send().await.map_err(|e| {
+        format!(
+            "openevidence: request failed — {}",
+            crate::sources::transport_reason(&e)
+        )
+    })?;
 
-    if res.status() == reqwest::StatusCode::UNAUTHORIZED || res.status() == reqwest::StatusCode::FORBIDDEN {
+    if res.status() == reqwest::StatusCode::UNAUTHORIZED
+        || res.status() == reqwest::StatusCode::FORBIDDEN
+    {
         return Err("openevidence: session expired or invalid, please sign in again".to_string());
     }
 
@@ -331,7 +406,10 @@ pub async fn search_openevidence(
         return Err(format!("openevidence: HTTP {}", res.status()));
     }
 
-    let body: Value = res.json().await.map_err(|e| format!("openevidence: json error: {}", e))?;
+    let body: Value = res
+        .json()
+        .await
+        .map_err(|e| format!("openevidence: json error: {}", e))?;
 
     // Collect citations from possible buckets
     let buckets = [
@@ -343,7 +421,8 @@ pub async fn search_openevidence(
         body.pointer("/message/citations"),
     ];
 
-    let items = buckets.into_iter()
+    let items = buckets
+        .into_iter()
         .flatten()
         .find_map(|v| v.as_array())
         .cloned()
@@ -355,39 +434,52 @@ pub async fn search_openevidence(
             break;
         }
 
-        let title = item.get("title")
+        let title = item
+            .get("title")
             .or_else(|| item.get("name"))
             .and_then(|v| v.as_str())
             .unwrap_or("(untitled citation)");
 
         let doi = item.get("doi").and_then(|v| v.as_str()).map(str::to_string);
-        let source_url = item.get("url")
+        let source_url = item
+            .get("url")
             .or_else(|| item.get("link"))
             .and_then(|v| v.as_str())
             .map(str::to_string)
             .or_else(|| doi.as_ref().map(|d| format!("https://doi.org/{}", d)));
 
-        let venue = item.get("journal")
+        let venue = item
+            .get("journal")
             .or_else(|| item.get("venue"))
             .or_else(|| item.get("source"))
             .and_then(|v| v.as_str())
             .unwrap_or("OpenEvidence Clinical Evidence");
 
-        let abstract_text = item.get("snippet")
+        let abstract_text = item
+            .get("snippet")
             .or_else(|| item.get("text"))
             .or_else(|| item.get("abstract"))
             .and_then(|v| v.as_str())
             .map(clean_html_text);
 
-        let year = item.get("year")
-            .and_then(|y| y.as_u64().map(|n| n as u32).or_else(|| y.as_str().and_then(|s| s.parse::<u32>().ok())));
+        let year = item.get("year").and_then(|y| {
+            y.as_u64()
+                .map(|n| n as u32)
+                .or_else(|| y.as_str().and_then(|s| s.parse::<u32>().ok()))
+        });
 
-        let authors = item.get("authors")
+        let authors = item
+            .get("authors")
             .and_then(|a| a.as_array())
-            .map(|arr| arr.iter().filter_map(|x| x.as_str().map(str::to_string)).collect::<Vec<_>>())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default();
 
-        let id = doi.as_ref()
+        let id = doi
+            .as_ref()
             .map(|d| format!("doi:{}", d))
             .unwrap_or_else(|| format!("openevidence:{}", idx));
 
