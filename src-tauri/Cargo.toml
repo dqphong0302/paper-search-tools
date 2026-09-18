@@ -30,7 +30,7 @@ urlencoding = "2.1"
 quick-xml = "0.42"
 regex = "1"
 toml_edit = "0.25"
-rfd = "0.15"
+rfd = { version = "0.15", features = ["common-controls-v6"] }
 
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 

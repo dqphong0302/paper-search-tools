@@ -187,6 +187,7 @@ fn antigravity_config(home: &Path) -> PathBuf {
     standard
 }
 
+#[cfg(test)]
 fn profiles_in(home: &Path) -> Vec<Profile> {
     profiles_in_with_claude_dir(home, claude_desktop_dir(home))
 }

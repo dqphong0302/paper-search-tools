@@ -21,6 +21,7 @@ mod sources;
 mod web_search;
 
 use db::Database;
+use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -387,9 +388,28 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Do not close app; hide window to tray so localhost gateway remains running
-                let _ = window.hide();
                 api.prevent_close();
+                const MINIMIZE: &str = "Minimize to tray";
+                const QUIT: &str = "Quit ScholarGate";
+                let choice = MessageDialog::new()
+                    .set_title("Close ScholarGate?")
+                    .set_description(
+                        "Minimizing keeps the local gateway running. Quitting stops the gateway and releases its port.",
+                    )
+                    .set_level(MessageLevel::Info)
+                    .set_buttons(MessageButtons::OkCancelCustom(
+                        MINIMIZE.to_string(),
+                        QUIT.to_string(),
+                    ))
+                    .show();
+                match choice {
+                    MessageDialogResult::Custom(label) if label == QUIT => {
+                        window.app_handle().exit(0);
+                    }
+                    _ => {
+                        let _ = window.hide();
+                    }
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
