@@ -58,7 +58,9 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: ScholarGate ${{ github.ref_name }}
           releaseBody: |
-            ScholarGate Desktop with the new application icon and branding.
+            ScholarGate Desktop with corrected Antigravity 2.0/IDE/CLI paths,
+            cross-platform Windows client detection, and an explicit choice to
+            minimize to tray or quit when closing the main window.
 
             Downloads: macOS Apple Silicon (aarch64), macOS Intel (x64), and Windows x64 (.exe or .msi).
 
