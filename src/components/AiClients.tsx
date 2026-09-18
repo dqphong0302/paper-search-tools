@@ -142,6 +142,8 @@ export const AiClients: React.FC = () => {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
         {[...clients].sort((a, b) => CLIENT_ORDER.indexOf(a.id) - CLIENT_ORDER.indexOf(b.id)).map((client) => {
+          const supportsSkills = client.skills_path !== null;
+          const primaryAction: Action = supportsSkills ? 'install_all' : 'install_mcp';
           const skillsInstalled = client.skills.filter((skill) => skill.installed).length;
           const managedSkills = client.skills.filter((skill) => skill.managed).length;
           const fullyInstalled = client.mcp_installed
@@ -177,15 +179,15 @@ export const AiClients: React.FC = () => {
               {client.detected && (
                 <>
                   <button
-                    id={`ai-client-${client.id}-install-all`}
+                    id={`ai-client-${client.id}-${supportsSkills ? 'install-all' : 'install-mcp'}`}
                     className="action-btn action-btn-primary"
                     style={{ width: '100%', justifyContent: 'center', padding: '8px 12px' }}
                     disabled={!!busy || !!client.mcp_error || (client.mcp_installed && !client.mcp_managed)}
-                    onClick={() => void run(client, 'install_all')}
+                    onClick={() => void run(client, primaryAction)}
                   >
-                    {busy === `${client.id}:install_all` ? <RefreshCw size={14} className="animate-spin" /> : <Plug size={14} />}
-                    <Package size={14} />
-                    <span>{fullyInstalled ? 'Reinstall MCP + skills' : 'Install MCP + skills'}</span>
+                    {busy === `${client.id}:${primaryAction}` ? <RefreshCw size={14} className="animate-spin" /> : <Plug size={14} />}
+                    {supportsSkills && <Package size={14} />}
+                    <span>{supportsSkills ? (fullyInstalled ? 'Reinstall MCP + skills' : 'Install MCP + skills') : 'Install MCP'}</span>
                   </button>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

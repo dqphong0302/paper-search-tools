@@ -69,11 +69,12 @@ pub struct ClientStatus {
     pub token_note: Option<String>,
 }
 
+#[derive(Clone)]
 struct Profile {
     id: &'static str,
     name: &'static str,
-    /// Directory that exists only when the client itself is installed.
-    marker: PathBuf,
+    /// Files or directories that indicate at least one client surface exists.
+    markers: Vec<PathBuf>,
     mcp: PathBuf,
     toml: bool,
     skills: Option<PathBuf>,
@@ -81,10 +82,17 @@ struct Profile {
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
+    home_from(
+        std::env::var_os("HOME").map(PathBuf::from),
+        std::env::var_os("USERPROFILE").map(PathBuf::from),
+    )
+}
+
+fn home_from(home: Option<PathBuf>, user_profile: Option<PathBuf>) -> Option<PathBuf> {
+    [home, user_profile]
+        .into_iter()
+        .flatten()
+        .find(|path| path.is_absolute())
 }
 
 /// Deterministic Claude Desktop config path beneath a supplied home directory.
@@ -108,7 +116,9 @@ fn system_claude_desktop_dir(home: &Path) -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         std::env::var_os("APPDATA")
-            .map(|path| PathBuf::from(path).join("Claude"))
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .map(|path| path.join("Claude"))
             .unwrap_or_else(|| claude_desktop_dir(home))
     }
     #[cfg(not(target_os = "windows"))]
@@ -182,29 +192,38 @@ fn profiles_in(home: &Path) -> Vec<Profile> {
 }
 
 fn profiles_in_with_claude_dir(home: &Path, claude_dir: PathBuf) -> Vec<Profile> {
+    let gemini = home.join(".gemini");
     vec![
         Profile {
             id: "antigravity",
             name: "Antigravity",
-            marker: home.join(".gemini/antigravity"),
+            markers: [
+                "config",
+                "antigravity",
+                "antigravity-cli",
+                "antigravity-ide",
+            ]
+            .into_iter()
+            .map(|name| gemini.join(name))
+            .collect(),
             mcp: antigravity_config(home),
             toml: false,
-            skills: Some(home.join(".gemini/antigravity/skills")),
-            note: "Reload the MCP servers from Antigravity's MCP panel after installing.",
+            skills: Some(gemini.join("config/skills")),
+            note: "Reload MCP servers and skills in Antigravity after installing. Antigravity 2.0, IDE and CLI share this configuration.",
         },
         Profile {
             id: "claude_desktop",
             name: "Claude Desktop",
-            marker: claude_dir.clone(),
+            markers: vec![claude_dir.clone()],
             mcp: claude_dir.join("claude_desktop_config.json"),
             toml: false,
-            skills: Some(home.join(".claude/skills")),
-            note: "Quit and reopen Claude Desktop after installing. Skills are shared through ~/.claude/skills.",
+            skills: None,
+            note: "Quit and reopen Claude Desktop after installing. Claude Desktop does not load skill folders.",
         },
         Profile {
             id: "codex",
             name: "Codex",
-            marker: home.join(".codex"),
+            markers: vec![home.join(".codex")],
             mcp: home.join(".codex/config.toml"),
             toml: true,
             skills: Some(home.join(".codex/skills")),
@@ -213,7 +232,7 @@ fn profiles_in_with_claude_dir(home: &Path, claude_dir: PathBuf) -> Vec<Profile>
         Profile {
             id: "opencode",
             name: "OpenCode",
-            marker: opencode_marker(home),
+            markers: vec![opencode_marker(home)],
             mcp: opencode_config(home),
             toml: false,
             skills: Some(opencode_skills(home)),
@@ -230,16 +249,12 @@ fn find(profiles: &[Profile], id: &str) -> Result<Profile, String> {
     profiles
         .iter()
         .find(|profile| profile.id == id)
-        .map(|profile| Profile {
-            id: profile.id,
-            name: profile.name,
-            marker: profile.marker.clone(),
-            mcp: profile.mcp.clone(),
-            toml: profile.toml,
-            skills: profile.skills.clone(),
-            note: profile.note,
-        })
+        .cloned()
         .ok_or_else(|| "Unknown AI client".to_string())
+}
+
+fn detected(profile: &Profile) -> bool {
+    profile.markers.iter().any(|marker| marker.exists())
 }
 
 /// Resolve symlinks so the caller edits the real file. The user's Antigravity
@@ -387,7 +402,7 @@ fn skill_states(root: &Path) -> (Vec<SkillState>, Option<String>) {
 }
 
 fn status(profile: &Profile, port: u16) -> ClientStatus {
-    let detected = profile.marker.is_dir();
+    let detected = detected(profile);
     let mcp_path = real_path(&profile.mcp);
     let mut mcp_installed = false;
     let mut mcp_managed = false;
@@ -499,14 +514,14 @@ fn install_mcp_for(
     port: u16,
     token: Option<String>,
 ) -> Result<ClientStatus, String> {
-    if !profile.marker.is_dir() {
-        return Err(format!(
-            "{} was not found on this machine ({} is missing)",
-            profile.name,
-            profile.marker.display()
-        ));
+    if !detected(profile) {
+        return Err(format!("{} was not found on this machine", profile.name));
     }
     let path = real_path(&profile.mcp);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Could not create {}: {error}", parent.display()))?;
+    }
     let has_token = token
         .as_deref()
         .map(str::trim)
@@ -679,8 +694,12 @@ fn install_all_for(
     port: u16,
     token: Option<String>,
 ) -> Result<ClientStatus, String> {
-    install_mcp_for(&profile, port, token)?;
-    install_skills_for(&profile, port)
+    let installed = install_mcp_for(profile, port, token)?;
+    if profile.skills.is_some() {
+        install_skills_for(profile, port)
+    } else {
+        Ok(installed)
+    }
 }
 
 fn install_skills_for(profile: &Profile, port: u16) -> Result<ClientStatus, String> {
@@ -690,7 +709,7 @@ fn install_skills_for(profile: &Profile, port: u16) -> Result<ClientStatus, Stri
             profile.name
         ));
     };
-    if !profile.marker.is_dir() {
+    if !detected(profile) {
         return Err(format!("{} was not found on this machine", profile.name));
     }
     if !root.exists() {
@@ -784,7 +803,6 @@ mod tests {
     /// real one is never touched by a test.
     fn fake_home() -> PathBuf {
         let home = scratch();
-        fs::create_dir_all(home.join(".claude/skills")).unwrap();
         let claude_desktop = claude_desktop_dir(&home);
         fs::create_dir_all(&claude_desktop).unwrap();
         fs::write(
@@ -794,9 +812,9 @@ mod tests {
         .unwrap();
         fs::create_dir_all(home.join(".codex")).unwrap();
         fs::write(home.join(".codex/config.toml"), "model = \"gpt-5\"\n").unwrap();
-        fs::create_dir_all(home.join(".gemini/antigravity")).unwrap();
+        fs::create_dir_all(home.join(".gemini/config")).unwrap();
         fs::write(
-            home.join(".gemini/antigravity/mcp_config.json"),
+            home.join(".gemini/config/mcp_config.json"),
             br#"{"mcpServers":{"other":{"command":"/usr/bin/node"}}}"#,
         )
         .unwrap();
@@ -807,6 +825,47 @@ mod tests {
         )
         .unwrap();
         home
+    }
+
+    #[test]
+    fn home_falls_back_when_home_is_not_absolute() {
+        let absolute = scratch();
+        assert_eq!(
+            home_from(Some(PathBuf::from("relative-home")), Some(absolute.clone())),
+            Some(absolute.clone())
+        );
+        fs::remove_dir_all(absolute).unwrap();
+    }
+
+    #[test]
+    fn antigravity_surfaces_share_current_config_and_skills_paths() {
+        for surface in [
+            "config",
+            "antigravity",
+            "antigravity-cli",
+            "antigravity-ide",
+        ] {
+            let home = scratch();
+            fs::create_dir_all(home.join(".gemini").join(surface)).unwrap();
+            let antigravity = find(&profiles_in(&home), "antigravity").unwrap();
+            let state = status(&antigravity, 8795);
+            assert!(state.detected, "surface {surface} was not detected");
+            assert_eq!(antigravity.mcp, home.join(".gemini/config/mcp_config.json"));
+            assert_eq!(antigravity.skills, Some(home.join(".gemini/config/skills")));
+            fs::remove_dir_all(home).unwrap();
+        }
+    }
+
+    #[test]
+    fn antigravity_keeps_an_existing_legacy_config() {
+        let home = scratch();
+        let legacy = home.join(".gemini/antigravity/mcp_config.json");
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(&legacy, br#"{"mcpServers":{}}"#).unwrap();
+        let antigravity = find(&profiles_in(&home), "antigravity").unwrap();
+        assert_eq!(antigravity.mcp, legacy);
+        assert_eq!(antigravity.skills, Some(home.join(".gemini/config/skills")));
+        fs::remove_dir_all(home).unwrap();
     }
 
     /// Uninstall has to work for clients wired up before the rename. Removal
@@ -833,7 +892,10 @@ mod tests {
         )
         .unwrap();
         let removed = remove_mcp_for(&claude, 8795).unwrap();
-        assert!(!removed.mcp_installed, "the pre-rename entry survived removal");
+        assert!(
+            !removed.mcp_installed,
+            "the pre-rename entry survived removal"
+        );
         let document: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert!(document["mcpServers"].get(LEGACY_SERVER_NAME).is_none());
 
@@ -865,8 +927,8 @@ mod tests {
         let before = status(&claude, 8795);
         assert!(before.detected);
         assert!(!before.mcp_installed);
-        assert_eq!(before.skills.len(), 3);
-        assert!(before.skills.iter().all(|skill| !skill.installed));
+        assert!(before.skills_path.is_none());
+        assert!(before.skills.is_empty());
 
         let installed = install_mcp_for(&claude, 8795, None).unwrap();
         assert!(installed.mcp_installed && installed.mcp_managed);
@@ -883,20 +945,12 @@ mod tests {
             gateway_url(8795)
         );
 
-        let with_skills = install_skills_for(&claude, 8795).unwrap();
-        assert!(with_skills
-            .skills
-            .iter()
-            .all(|skill| skill.installed && skill.managed));
-        assert!(home.join(".claude/skills/paper-search/SKILL.md").is_file());
-
-        // Installing twice must not fail or duplicate anything.
-        assert!(install_skills_for(&claude, 8795).is_ok());
+        assert!(install_skills_for(&claude, 8795).is_err());
+        assert!(install_all_for(&claude, 8795, None).is_ok());
 
         let removed = remove_mcp_for(&claude, 8795).unwrap();
         assert!(!removed.mcp_installed);
-        let cleared = remove_skills_for(&claude, 8795).unwrap();
-        assert!(cleared.skills.iter().all(|skill| !skill.installed));
+        assert!(remove_skills_for(&claude, 8795).is_err());
         let document: Value = serde_json::from_slice(
             &fs::read(claude_desktop_dir(&home).join("claude_desktop_config.json")).unwrap(),
         )
@@ -950,7 +1004,7 @@ mod tests {
     fn an_entry_this_app_did_not_write_is_reported_but_never_replaced() {
         let home = fake_home();
         fs::write(
-            home.join(".gemini/antigravity/mcp_config.json"),
+            home.join(".gemini/config/mcp_config.json"),
             format!(
                 r#"{{"mcpServers":{{"my-own":{{"url":"{}"}}}}}}"#,
                 gateway_url(8795)
@@ -1076,10 +1130,9 @@ mod tests {
 
         let installed = install_mcp_for(&antigravity, 8795, None).unwrap();
         assert!(installed.mcp_installed && installed.mcp_managed);
-        let document: Value = serde_json::from_slice(
-            &fs::read(home.join(".gemini/antigravity/mcp_config.json")).unwrap(),
-        )
-        .unwrap();
+        let document: Value =
+            serde_json::from_slice(&fs::read(home.join(".gemini/config/mcp_config.json")).unwrap())
+                .unwrap();
         let entry = &document["mcpServers"][SERVER_NAME];
         assert_eq!(entry["serverUrl"], gateway_sse_url(8795));
         assert!(entry.get("url").is_none());
@@ -1093,7 +1146,8 @@ mod tests {
     #[test]
     fn installing_skills_updates_an_unchanged_managed_old_bundle() {
         let home = fake_home();
-        let skill = home.join(".claude/skills/paper-search");
+        let skill = home.join(".codex/skills/paper-search");
+        fs::create_dir_all(skill.parent().unwrap()).unwrap();
         fs::create_dir(&skill).unwrap();
         let old = b"---\nname: paper-search\ndescription: Old bundle\n---\nOld instructions.";
         fs::write(skill.join("SKILL.md"), old).unwrap();
@@ -1108,8 +1162,8 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let claude = find(&profiles_in(&home), "claude_desktop").unwrap();
-        let before = status(&claude, 8795);
+        let codex = find(&profiles_in(&home), "codex").unwrap();
+        let before = status(&codex, 8795);
         assert!(
             !before
                 .skills
@@ -1119,7 +1173,7 @@ mod tests {
                 .up_to_date
         );
 
-        let after = install_skills_for(&claude, 8795).unwrap();
+        let after = install_skills_for(&codex, 8795).unwrap();
         assert!(after.skills.iter().all(|item| item.up_to_date));
         // The pre-rename receipt must not survive the update, or every skill
         // folder installed by an older build keeps a dead file forever.

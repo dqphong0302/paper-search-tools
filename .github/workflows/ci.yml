@@ -24,9 +24,12 @@ jobs:
       - run: pnpm test
 
   rust:
-    name: Rust (cargo test)
-    # macOS runner matches the primary target and avoids Linux webkit deps.
-    runs-on: macos-latest
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

@@ -194,10 +194,10 @@ The app detects the clients installed on this machine and reports, per client, w
 
 | Client | MCP config | Skills folder |
 |---|---|---|
-| Claude Code | `~/.claude.json` (JSON) | `~/.claude/skills` |
 | Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (JSON; `%APPDATA%\Claude` on Windows, `~/.config/Claude` on Linux) | — (Claude Desktop does not load skill folders) |
 | Codex | `~/.codex/config.toml` (TOML) | `~/.codex/skills` |
-| Antigravity | `~/.gemini/antigravity/mcp_config.json` (JSON) | `~/.gemini/antigravity/skills` |
+| Antigravity 2.0 / IDE / CLI | `~/.gemini/config/mcp_config.json` (JSON; existing legacy config is preserved) | `~/.gemini/config/skills` |
+| OpenCode | `~/.config/opencode/opencode.jsonc` (JSONC) | `~/.config/opencode/skills` |
 
 - Install writes one entry named `scholargate` pointing at `http://127.0.0.1:<port>/mcp`, after backing up the previous file. Nothing else in the file is touched: the TOML editor preserves comments and formatting, and the JSON editor keeps every other key.
 - A symlinked config (Antigravity ships one) is resolved to the real file, and the resolved path is what the panel displays.

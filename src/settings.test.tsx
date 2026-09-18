@@ -216,6 +216,20 @@ describe('AI client setup', () => {
     expect(host.textContent).toContain('my-own-gateway');
   });
 
+  it('offers MCP-only setup when a client has no skills support', async () => {
+    vi.mocked(isTauri).mockReturnValue(true);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const claude = client({
+      id: 'claude_desktop', name: 'Claude Desktop', skills_path: null, skills: [],
+    });
+    vi.mocked(invoke).mockResolvedValueOnce([claude]).mockResolvedValueOnce({ ...claude, mcp_installed: true });
+    await render(<AiClients />);
+    await click('#ai-client-claude_desktop-install-mcp');
+    expect(invoke).toHaveBeenLastCalledWith('setup_ai_client', {
+      client: 'claude_desktop', action: 'install_mcp',
+    });
+  });
+
   it('reports a client that is not installed instead of offering to set it up', async () => {
     vi.mocked(isTauri).mockReturnValue(true);
     vi.mocked(invoke).mockResolvedValueOnce([client({ detected: false })]);
