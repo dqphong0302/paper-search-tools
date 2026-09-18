@@ -87,8 +87,8 @@ fn home() -> Option<PathBuf> {
         .filter(|path| path.is_absolute())
 }
 
-/// Where Claude Desktop keeps its config, which is the one path that differs per
-/// platform rather than living under the home directory in the same place.
+/// Deterministic Claude Desktop config path beneath a supplied home directory.
+/// Keeping this free of process-wide environment variables also isolates tests.
 fn claude_desktop_dir(home: &Path) -> PathBuf {
     #[cfg(target_os = "macos")]
     {
@@ -96,10 +96,7 @@ fn claude_desktop_dir(home: &Path) -> PathBuf {
     }
     #[cfg(target_os = "windows")]
     {
-        std::env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join("AppData/Roaming"))
-            .join("Claude")
+        home.join("AppData/Roaming/Claude")
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -107,9 +104,25 @@ fn claude_desktop_dir(home: &Path) -> PathBuf {
     }
 }
 
+fn system_claude_desktop_dir(home: &Path) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var_os("APPDATA")
+            .map(|path| PathBuf::from(path).join("Claude"))
+            .unwrap_or_else(|| claude_desktop_dir(home))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        claude_desktop_dir(home)
+    }
+}
+
 fn profiles() -> Vec<Profile> {
     match home() {
-        Some(home) => profiles_in(&home),
+        Some(home) => {
+            let claude_dir = system_claude_desktop_dir(&home);
+            profiles_in_with_claude_dir(&home, claude_dir)
+        }
         None => Vec::new(),
     }
 }
@@ -165,6 +178,10 @@ fn antigravity_config(home: &Path) -> PathBuf {
 }
 
 fn profiles_in(home: &Path) -> Vec<Profile> {
+    profiles_in_with_claude_dir(home, claude_desktop_dir(home))
+}
+
+fn profiles_in_with_claude_dir(home: &Path, claude_dir: PathBuf) -> Vec<Profile> {
     vec![
         Profile {
             id: "antigravity",
@@ -178,8 +195,8 @@ fn profiles_in(home: &Path) -> Vec<Profile> {
         Profile {
             id: "claude_desktop",
             name: "Claude Desktop",
-            marker: claude_desktop_dir(home),
-            mcp: claude_desktop_dir(home).join("claude_desktop_config.json"),
+            marker: claude_dir.clone(),
+            mcp: claude_dir.join("claude_desktop_config.json"),
             toml: false,
             skills: Some(home.join(".claude/skills")),
             note: "Quit and reopen Claude Desktop after installing. Skills are shared through ~/.claude/skills.",
