@@ -63,7 +63,7 @@ fn config_path(path: &str) -> Result<PathBuf, String> {
 
 fn sidecar(path: &Path) -> PathBuf {
     path.with_file_name(format!(
-        ".{}.scholargateway.json",
+        ".{}.scholargate.json",
         path.file_name().unwrap().to_string_lossy()
     ))
 }
@@ -450,7 +450,7 @@ pub async fn test_mcp_http(definition: Value) -> Result<Value, String> {
         }
     }
     let mut response = request.json(&json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
-        "protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ScholarGateway-check","version":"1"}}}))
+        "protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ScholarGate-check","version":"1"}}}))
         .send().await.map_err(|error| error.without_url().to_string())?;
     if !response.status().is_success() {
         return Err(format!("HTTP {}", response.status()));
@@ -500,7 +500,7 @@ mod tests {
         let added = edit_mcp_config(
             path.clone(),
             before.revision.clone(),
-            "scholargateway".into(),
+            "scholargate".into(),
             "add".into(),
             Some(definition.clone()),
         )
@@ -529,16 +529,16 @@ mod tests {
         let disabled = edit_mcp_config(
             path.clone(),
             added.revision,
-            "scholargateway".into(),
+            "scholargate".into(),
             "disable".into(),
             None,
         )
         .unwrap();
-        assert!(!disabled.servers.contains_key("scholargateway"));
+        assert!(!disabled.servers.contains_key("scholargate"));
         let enabled = edit_mcp_config(
             path.clone(),
             disabled.revision,
-            "scholargateway".into(),
+            "scholargate".into(),
             "enable".into(),
             None,
         )
@@ -546,7 +546,7 @@ mod tests {
         let removed = edit_mcp_config(
             path.clone(),
             enabled.revision,
-            "scholargateway".into(),
+            "scholargate".into(),
             "remove".into(),
             None,
         )
@@ -603,7 +603,7 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
         let result = test_mcp_http(json!({"url":url})).await.unwrap();
-        assert_eq!(result["serverInfo"]["name"], "scholargateway");
+        assert_eq!(result["serverInfo"]["name"], "scholargate");
         assert!(test_mcp_http(json!({"command":"/usr/bin/node"}))
             .await
             .is_err());

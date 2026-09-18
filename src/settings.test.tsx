@@ -192,7 +192,7 @@ describe('AI client setup', () => {
   it('shows what is already wired up and installs on request', async () => {
     vi.mocked(isTauri).mockReturnValue(true);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const installed = client({ mcp_installed: true, mcp_managed: true, mcp_entry: 'scholargateway' });
+    const installed = client({ mcp_installed: true, mcp_managed: true, mcp_entry: 'scholargate' });
     vi.mocked(invoke).mockResolvedValueOnce([client()]).mockResolvedValueOnce(installed);
     await render(<AiClients />);
     expect(host.textContent).toContain('Codex');

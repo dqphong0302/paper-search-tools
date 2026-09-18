@@ -39,7 +39,7 @@ export const TopicSetupModal: React.FC<TopicSetupModalProps> = ({ onComplete }) 
     <div className="modal-dialog" style={{ maxWidth: 760, width: '92vw', maxHeight: '88vh', overflowY: 'auto' }}>
       <div className="modal-header">
         <div><div id="topic-setup-title" className="modal-title">Which field are you searching in?</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>ScholarGateway will limit the search to this group’s active sources. You can change it again in Settings.</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>ScholarGate will limit the search to this group’s active sources. You can change it again in Settings.</div>
         </div>
       </div>
       <div style={{ padding: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>

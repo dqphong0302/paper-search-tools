@@ -569,7 +569,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `scholargateway_${new Date().toISOString().slice(0, 10)}.${extension}`;
+    anchor.download = `scholargate_${new Date().toISOString().slice(0, 10)}.${extension}`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -1377,7 +1377,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
       })()}
 
       {/* ---------------- Results List ---------------- */}
-      <div>
+      <div className="paper-list">
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <SearchScanner query={query || 'All topics'} scope={searchScope} />
@@ -1485,7 +1485,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
         isOpen={agentExportModalOpen}
         onClose={() => setAgentExportModalOpen(false)}
         papers={agentExportPapers}
-        workspaceName="ScholarGateway Discovery"
+        workspaceName="ScholarGate Discovery"
       />
     </div>
   );

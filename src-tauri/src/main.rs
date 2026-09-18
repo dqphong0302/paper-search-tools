@@ -209,7 +209,7 @@ async fn open_service_login(app: AppHandle, service: String) -> Result<(), Strin
         if (reported) return;
         reported = true;
         var payload = JSON.stringify({{ token: token || "", cookie: cookie || "" }});
-        window.location.href = "https://" + window.location.hostname + "/__scholargateway_session__?data=" + encodeURIComponent(payload);
+        window.location.href = "https://" + window.location.hostname + "/__scholargate_session__?data=" + encodeURIComponent(payload);
       }}
 
       setInterval(checkSession, 1500);
@@ -231,7 +231,7 @@ async fn open_service_login(app: AppHandle, service: String) -> Result<(), Strin
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15")
         .initialization_script(&script)
         .on_navigation(move |nav_url| {
-            if nav_url.path() == "/__scholargateway_session__" {
+            if nav_url.path() == "/__scholargate_session__" {
                 if let Some((_, encoded)) = nav_url.query_pairs().find(|(k, _)| k == "data") {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&encoded) {
                         let token = val.get("token").and_then(|v| v.as_str()).unwrap_or("");
@@ -337,8 +337,8 @@ fn main() {
         .manage(AppSharedState { db, port })
         .setup(|app| {
             // Build System Tray Menu
-            let quit_i = MenuItem::with_id(app, "quit", "Quit ScholarGateway", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "Open ScholarGateway", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit ScholarGate", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Open ScholarGate", true, None::<&str>)?;
             let status_i = MenuItem::with_id(
                 app,
                 "status",
@@ -354,7 +354,7 @@ fn main() {
 
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("ScholarGateway Desktop — Localhost Agent Gateway")
+                .tooltip("ScholarGate Desktop — Localhost Agent Gateway")
                 .on_menu_event(|app: &AppHandle, event| match event.id.as_ref() {
                     "quit" => {
                         app.exit(0);

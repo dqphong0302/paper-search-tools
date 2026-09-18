@@ -162,7 +162,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
             <span className="cockpit-badge badge-emerald">{downloads.length} Documents</span>
           </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            Stored locally in <code style={{ color: 'var(--primary-cyan)', fontFamily: 'var(--font-mono)' }}>~/Documents/ScholarGateway/Papers</code>
+            Stored locally in <code style={{ color: 'var(--primary-cyan)', fontFamily: 'var(--font-mono)' }}>~/Documents/ScholarGate/Papers</code>
           </p>
         </div>
 

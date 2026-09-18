@@ -108,7 +108,7 @@ export const AgentAccess: React.FC = () => {
       <input id="agent-new-token" className="field-input" type="password" value={created.token} readOnly autoComplete="off" />
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <button id="agent-copy-config" className="action-btn" disabled={busy} onClick={() => void perform(async () => {
-          await navigator.clipboard.writeText(JSON.stringify({ mcpServers: { scholargateway: {
+          await navigator.clipboard.writeText(JSON.stringify({ mcpServers: { scholargate: {
             type: 'http', url: gatewayUrl('/mcp'), headers: { Authorization: `Bearer ${created.token}` },
           } } }, null, 2));
           setMessage('MCP configuration copied. Keep it private.');

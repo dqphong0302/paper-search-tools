@@ -105,12 +105,12 @@ export const SideNav: React.FC<SideNavProps> = ({
     <aside className={`side-nav ${isCollapsed ? 'collapsed' : ''}`}>
       {/* Brand Header */}
       <div className="side-nav-brand">
-        <div className="brand-logo-box" title="ScholarGateway">
-          <img src="/scholargateway.png" alt="ScholarGateway" width={36} height={36} />
+        <div className="brand-logo-box" title="ScholarGate">
+          <img src="/scholargate.png" alt="ScholarGate" width={36} height={36} />
         </div>
         {!isCollapsed && (
           <div className="brand-text-container">
-            <div className="brand-app-name">ScholarGateway</div>
+            <div className="brand-app-name">ScholarGate</div>
             <div className="brand-app-sub">Local · Desktop</div>
           </div>
         )}

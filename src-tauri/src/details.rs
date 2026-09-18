@@ -111,7 +111,7 @@ pub async fn lookup(state: &AppState, id: &str) -> Result<Paper, (u16, String)> 
     ))?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(12))
-        .user_agent("ScholarGateway/1.0")
+        .user_agent("ScholarGate/1.0")
         .build()
         .map_err(|e| (500, e.to_string()))?;
     let mut request = client.get(format!(

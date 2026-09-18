@@ -1,5 +1,5 @@
 [package]
-name = "scholargateway"
+name = "scholargate"
 version = "1.0.2"
 description = "Native Desktop App & Localhost Gateway for Academic Research"
 authors = ["Phong Dang"]

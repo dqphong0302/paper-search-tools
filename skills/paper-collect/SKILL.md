@@ -1,17 +1,17 @@
 ---
 name: paper-collect
-description: Mark selected papers as interesting in ScholarGateway, add requested notes and prepare citations; when its local server is unavailable, use web search for metadata and leave library changes pending.
+description: Mark selected papers as interesting in ScholarGate, add requested notes and prepare citations; when its local server is unavailable, use web search for metadata and leave library changes pending.
 ---
 
 # Paper collection
 
-Use ScholarGateway MCP and inspect the current tool schemas. ScholarGateway has one interest library, so no destination selection is needed.
+Use ScholarGate MCP and inspect the current tool schemas. ScholarGate has one interest library, so no destination selection is needed.
 
 ## Availability and fallback
 
-- Probe ScholarGateway once with an available lightweight MCP operation or the first required tool call. Treat a missing tool, failed MCP initialization/ping, connection refusal or timeout to the local server as unavailable; do not keep retrying it.
-- If unavailable, use the AI client's standard web-search or browsing capability only to resolve papers, verify metadata and prepare citations or a pending collection list. Do not use ScholarGateway's `search_web`, because it depends on the same local server.
-- Never claim that a paper, note or reading state was saved without a successful ScholarGateway mutation. Report the library change as pending and briefly say the app must be running and MCP connected to complete it.
+- Probe ScholarGate once with an available lightweight MCP operation or the first required tool call. Treat a missing tool, failed MCP initialization/ping, connection refusal or timeout to the local server as unavailable; do not keep retrying it.
+- If unavailable, use the AI client's standard web-search or browsing capability only to resolve papers, verify metadata and prepare citations or a pending collection list. Do not use ScholarGate's `search_web`, because it depends on the same local server.
+- Never claim that a paper, note or reading state was saved without a successful ScholarGate mutation. Report the library change as pending and briefly say the app must be running and MCP connected to complete it.
 - Do not switch to web fallback for an ambiguous mutation result. First follow the verification rule below when the server remains reachable.
 
 - Resolve each requested paper using `get_paper_details` or `search_academic_papers`. Preserve its canonical ID and source link. Never invent missing bibliographic fields.

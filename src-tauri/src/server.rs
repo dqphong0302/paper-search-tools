@@ -134,7 +134,7 @@ pub async fn start_server(port: u16, db: Database) {
             return;
         }
     };
-    println!("ScholarGateway: http://127.0.0.1:{port} (REST + /mcp + /sse)");
+    println!("ScholarGate: http://127.0.0.1:{port} (REST + /mcp + /sse)");
     let _ = axum::serve(listener, app).await;
 }
 
@@ -263,7 +263,7 @@ fn client_label(headers: &HeaderMap) -> String {
 async fn health_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",
-        "service": "ScholarGateway Desktop",
+        "service": "ScholarGate Desktop",
         "port": state.port,
         "mode": "standalone_local",
         "version": "1.0.0"

@@ -75,11 +75,11 @@ export const AiClients: React.FC = () => {
 
   const run = async (client: AiClientStatus, action: Action) => {
     const confirmations: Record<Action, string> = {
-      install_all: `Install the ScholarGateway MCP entry and 3 skills for ${client.name}?\nThe current configuration is backed up before it is changed.`,
-      install_mcp: `Add the ScholarGateway MCP server to ${client.name}?\nFile: ${client.mcp_path}\nA backup of the current file is kept.`,
-      remove_mcp: `Remove the ScholarGateway MCP server from ${client.name}?\nFile: ${client.mcp_path}`,
-      install_skills: `Install the three bundled ScholarGateway skills into ${client.skills_path}?`,
-      remove_skills: `Remove the bundled ScholarGateway skills from ${client.skills_path}?\nEach folder is moved to a recoverable archive, not deleted.`,
+      install_all: `Install the ScholarGate MCP entry and 3 skills for ${client.name}?\nThe current configuration is backed up before it is changed.`,
+      install_mcp: `Add the ScholarGate MCP server to ${client.name}?\nFile: ${client.mcp_path}\nA backup of the current file is kept.`,
+      remove_mcp: `Remove the ScholarGate MCP server from ${client.name}?\nFile: ${client.mcp_path}`,
+      install_skills: `Install the three bundled ScholarGate skills into ${client.skills_path}?`,
+      remove_skills: `Remove the bundled ScholarGate skills from ${client.skills_path}?\nEach folder is moved to a recoverable archive, not deleted.`,
     };
     if (!window.confirm(confirmations[action])) return;
     setBusy(`${client.id}:${action}`);
@@ -122,7 +122,7 @@ export const AiClients: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, maxWidth: 640 }}>
           Connects this gateway to the AI clients on this machine. Installing writes one MCP server entry
-          named <code>scholargateway</code> and copies the three bundled skills; the previous config file is
+          named <code>scholargate</code> and copies the three bundled skills; the previous config file is
           backed up first, and entries this app did not create are never modified.
         </p>
         <button id="ai-clients-refresh" className="action-btn" onClick={() => void refresh()} disabled={loading}>
@@ -195,7 +195,7 @@ export const AiClients: React.FC = () => {
                       <span className="cockpit-badge" style={{ fontSize: 9 }}>{client.mcp_format.toUpperCase()}</span>
                     </div>
                     <code style={{ fontSize: 10, color: 'var(--text-dim)', overflowWrap: 'anywhere' }}>{client.mcp_path}</code>
-                    {client.mcp_installed && client.mcp_entry && client.mcp_entry !== 'scholargateway' && (
+                    {client.mcp_installed && client.mcp_entry && client.mcp_entry !== 'scholargate' && (
                       <span style={{ fontSize: 10.5, color: 'var(--status-amber)' }}>
                         Already present under the name “{client.mcp_entry}”, which this app did not create.
                       </span>
@@ -247,7 +247,7 @@ export const AiClients: React.FC = () => {
                               title={
                                 skill.installed
                                   ? skill.managed
-                                    ? `${skill.name} installed by ScholarGateway${skill.enabled ? '' : ' (disabled)'}${skill.up_to_date ? '' : ' (update available)'}`
+                                    ? `${skill.name} installed by ScholarGate${skill.enabled ? '' : ' (disabled)'}${skill.up_to_date ? '' : ' (update available)'}`
                                     : `${skill.name} exists but was not installed by this app`
                                   : `${skill.name} not installed`
                               }

@@ -26,7 +26,7 @@ pub async fn search_scopus(
         .get(&url)
         .header("X-ELS-APIKey", key)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {
@@ -151,7 +151,7 @@ pub async fn search_ieee(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {
@@ -281,7 +281,7 @@ pub async fn search_springer(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {

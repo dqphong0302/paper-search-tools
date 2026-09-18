@@ -33,4 +33,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - run: cargo test --manifest-path src-tauri/Cargo.toml --bin scholargateway
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --bin scholargate

@@ -108,7 +108,7 @@ export const CockpitDashboard: React.FC<CockpitDashboardProps> = ({
       {/* Header */}
       <div className="page-header">
         <div>
-          <h2 className="dashboard-brand-title">ScholarGateway</h2>
+          <h2 className="dashboard-brand-title">ScholarGate</h2>
           <p className="page-subtitle">Multidisciplinary Academic Discovery & AI Agent Gateway</p>
         </div>
       </div>

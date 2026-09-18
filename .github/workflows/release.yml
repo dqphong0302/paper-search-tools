@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: node -e 'const p = require("./package.json"); const t = require("./src-tauri/tauri.conf.json"); if (process.env.GITHUB_REF_NAME !== `v${p.version}` || p.version !== t.version) process.exit(1)'
       - run: pnpm test
-      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --bin scholargateway
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --bin scholargate
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

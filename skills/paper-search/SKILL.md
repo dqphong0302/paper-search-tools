@@ -1,18 +1,18 @@
 ---
 name: paper-search
-description: Search scholarly papers through ScholarGateway MCP, with standard web search as a fallback when its local server is unavailable. Use for literature discovery intended for ScholarGateway.
+description: Search scholarly papers through ScholarGate MCP, with standard web search as a fallback when its local server is unavailable. Use for literature discovery intended for ScholarGate.
 ---
 
 # Paper search
 
-Prefer the connected ScholarGateway MCP tools (`search_academic_papers`, `get_search_catalog`, `get_paper_details`) and discover their current schemas before calling them.
+Prefer the connected ScholarGate MCP tools (`search_academic_papers`, `get_search_catalog`, `get_paper_details`) and discover their current schemas before calling them.
 
 ## Availability and fallback
 
-- Probe ScholarGateway once with an available lightweight MCP operation or the first required tool call. Treat a missing tool, failed MCP initialization/ping, connection refusal or timeout to the local server as unavailable; do not keep retrying it.
-- When unavailable, continue the literature request with the AI client's standard web-search or browsing capability. Do not use ScholarGateway's `search_web`, because it depends on the same local server.
+- Probe ScholarGate once with an available lightweight MCP operation or the first required tool call. Treat a missing tool, failed MCP initialization/ping, connection refusal or timeout to the local server as unavailable; do not keep retrying it.
+- When unavailable, continue the literature request with the AI client's standard web-search or browsing capability. Do not use ScholarGate's `search_web`, because it depends on the same local server.
 - Preserve the user's topic, source, date and access filters. Prefer publisher pages and scholarly indexes, return traceable links or DOIs, deduplicate conservatively, and identify web snippets as snippets rather than abstracts or full text.
-- State briefly that web fallback was used and that ScholarGateway-only source status, ranking, pagination, cache and interest-library access were unavailable. Do not ask the user to start the app unless they need those app-only features.
+- State briefly that web fallback was used and that ScholarGate-only source status, ranking, pagination, cache and interest-library access were unavailable. Do not ask the user to start the app unless they need those app-only features.
 - An empty result or failure from one upstream source is incomplete coverage, not proof that the local server is unavailable; keep the normal per-source handling in that case.
 
 ## Standard Domain Presets & Modes

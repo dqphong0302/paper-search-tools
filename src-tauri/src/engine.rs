@@ -237,7 +237,7 @@ fn pooled_client(seconds: u64, proxy_url: Option<&str>) -> reqwest::Client {
     }
     let mut builder = reqwest::Client::builder()
         .timeout(Duration::from_secs(seconds))
-        .user_agent("ScholarGateway-Desktop/1.0 (mailto:dqphong0302@gmail.com)");
+        .user_agent("ScholarGate-Desktop/1.0 (mailto:dqphong0302@gmail.com)");
     if let Some(proxy_url) = proxy_url {
         if let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
             builder = builder.proxy(proxy);
@@ -628,7 +628,7 @@ impl AcademicEngine {
     ) -> Result<Vec<Paper>, String> {
         // NCBI asks every client to identify itself; an api_key also lifts the
         // anonymous 3 req/s ceiling to 10 req/s.
-        let mut ncbi_params = String::from("&tool=ScholarGateway");
+        let mut ncbi_params = String::from("&tool=ScholarGate");
         if let Some(email) = SourceCredentials::clean(creds.ncbi_email.clone()) {
             ncbi_params.push_str(&format!("&email={}", urlencoding::encode(&email)));
         }

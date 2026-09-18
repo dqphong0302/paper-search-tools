@@ -86,7 +86,7 @@ export const Library: React.FC<LibraryProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${name ?? `scholargateway_${new Date().toISOString().slice(0, 10)}`}.${extension}`;
+    a.download = `${name ?? `scholargate_${new Date().toISOString().slice(0, 10)}`}.${extension}`;
     document.body.appendChild(a);
     a.click();
     a.remove();

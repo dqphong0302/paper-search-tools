@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ScholarGateway",
+  "productName": "ScholarGate",
   "version": "1.0.2",
-  "identifier": "com.phongdang.scholargateway",
+  "identifier": "com.phongdang.scholargate",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ScholarGateway Desktop — Academic Research & Agent Gateway",
+        "title": "ScholarGate Desktop — Academic Research & Agent Gateway",
         "width": 1280,
         "height": 840,
         "minWidth": 960,

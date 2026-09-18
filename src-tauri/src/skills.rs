@@ -7,7 +7,11 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-const MARKER: &str = ".scholargateway-install.json";
+const MARKER: &str = ".scholargate-install.json";
+/// Marker written before the app was renamed. Skills installed by an older
+/// build still carry it, and without accepting it the app would stop
+/// recognising — and so stop managing or updating — its own installs.
+const LEGACY_MARKER: &str = ".scholargateway-install.json";
 const DISABLED: &str = "SKILL.md.disabled";
 const MAX_BYTES: usize = 20 * 1024 * 1024;
 // Serialize our own install/toggle/remove operations, including concurrent IPC calls.
@@ -121,7 +125,7 @@ fn snapshot(root: &Path, installed: bool) -> Result<Files, String> {
             }
             #[cfg(windows)]
             let relative = relative.replace('\\', "/");
-            if relative == MARKER {
+            if relative == MARKER || relative == LEGACY_MARKER {
                 if installed {
                     continue;
                 }
@@ -200,9 +204,13 @@ fn hashes(files: &Files) -> BTreeMap<String, String> {
 }
 
 fn receipt(path: &Path) -> Result<Receipt, String> {
-    let marker = path.join(MARKER);
+    let marker = if path.join(MARKER).exists() {
+        path.join(MARKER)
+    } else {
+        path.join(LEGACY_MARKER)
+    };
     let meta =
-        fs::symlink_metadata(&marker).map_err(|_| "Not a skill installed by ScholarGateway")?;
+        fs::symlink_metadata(&marker).map_err(|_| "Not a skill installed by ScholarGate")?;
     if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 100_000 {
         return Err("Invalid receipt".into());
     }
@@ -324,7 +332,7 @@ pub fn list_skills(target_root: String) -> Result<Vec<SkillInfo>, String> {
         {
             continue;
         }
-        if !path.join(MARKER).exists() {
+        if !path.join(MARKER).exists() && !path.join(LEGACY_MARKER).exists() {
             continue;
         }
         let receipt = receipt(&path)?;
@@ -351,7 +359,7 @@ pub fn remove_skill(target_root: String, name: String) -> Result<String, String>
             "The skill changed after installation; not removing it automatically so your edits are kept".into(),
         );
     }
-    let archive = root.join(format!(".scholargateway-removed-{}", uuid::Uuid::new_v4()));
+    let archive = root.join(format!(".scholargate-removed-{}", uuid::Uuid::new_v4()));
     fs::rename(&target, &archive).map_err(|e| e.to_string())?;
     Ok(archive.to_string_lossy().into())
 }

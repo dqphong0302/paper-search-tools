@@ -18,7 +18,7 @@ pub async fn search_clinicaltrials(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {
@@ -145,7 +145,7 @@ pub async fn search_biorxiv_medrxiv(
 
     let res = client
         .get(&url)
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {
@@ -266,7 +266,7 @@ pub async fn search_plos(
 
     let res = client
         .get(&url)
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {
@@ -373,7 +373,7 @@ pub async fn search_pmc(
 
     let res = client
         .get(&esearch_url)
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| format!("pmc: esearch failed: {}", e))?;
@@ -405,7 +405,7 @@ pub async fn search_pmc(
 
     let sum_res = client
         .get(&esummary_url)
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| format!("pmc: esummary failed: {}", e))?;

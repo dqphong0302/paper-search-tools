@@ -141,7 +141,7 @@ export const AiAgentExportModal: React.FC<AiAgentExportModalProps> = ({
           '',
           `# Literature Review: ${workspaceName}`,
           '',
-          `*Contains ${papers.length} papers exported from ScholarGateway.*`,
+          `*Contains ${papers.length} papers exported from ScholarGate.*`,
           '',
           '## Paper list',
           ...papers.map((p, idx) =>
@@ -163,7 +163,7 @@ export const AiAgentExportModal: React.FC<AiAgentExportModalProps> = ({
         case 'claude':
           return [
             '<instruction>',
-            'You are an expert in academic research and literature review. Below is paper data from ScholarGateway. Analyse it in depth, compare the main claims, identify the research gaps and propose the next directions.',
+            'You are an expert in academic research and literature review. Below is paper data from ScholarGate. Analyse it in depth, compare the main claims, identify the research gaps and propose the next directions.',
             '</instruction>',
             '',
             '<research_context>',

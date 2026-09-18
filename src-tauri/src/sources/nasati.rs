@@ -27,7 +27,7 @@ pub async fn search_nasati(
         .get(&url)
         .header(
             "User-Agent",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ScholarGateway/1.0",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ScholarGate/1.0",
         )
         .send()
         .await

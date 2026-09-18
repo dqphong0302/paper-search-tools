@@ -2,7 +2,7 @@
 //!
 //! The app already knows how to edit an MCP client config (`integrations`) and
 //! how to install a skill folder (`skills`). What it could not do was tell the
-//! user *which* clients exist on this machine, whether ScholarGateway is already
+//! user *which* clients exist on this machine, whether ScholarGate is already
 //! wired into them, and do both edits in one click. This module adds exactly
 //! that: detection plus the two install actions, reusing the safe primitives so
 //! backups, receipts and the "never touch what we did not install" rule apply
@@ -16,7 +16,11 @@ use std::{
 };
 
 /// The entry name this app writes into every client config.
-pub const SERVER_NAME: &str = "scholargateway";
+pub const SERVER_NAME: &str = "scholargate";
+/// The entry name written before the app was renamed. Installing removes it, so
+/// a client set up by an older build is not left with two entries pointing at
+/// the same gateway.
+pub const LEGACY_SERVER_NAME: &str = "scholargateway";
 /// Environment variable Codex reads the gateway token from. Codex only accepts a
 /// variable name, never a literal token, so the secret stays out of the file.
 pub const CODEX_TOKEN_ENV: &str = "SCHOLARGATEWAY_TOKEN";
@@ -494,7 +498,7 @@ fn install_mcp_for(
     if profile.toml {
         let mut document = read_toml(&path)?;
         if let (Some(existing), false) = toml_status(&document, port) {
-            if existing != SERVER_NAME {
+            if existing != SERVER_NAME && existing != LEGACY_SERVER_NAME {
                 return Err(format!(
                     "{} already points at this gateway under the name '{existing}'. Remove that entry first if you want it managed here.",
                     profile.name
@@ -513,6 +517,9 @@ fn install_mcp_for(
             entry.insert("bearer_token_env_var", toml_edit::value(CODEX_TOKEN_ENV));
         }
         servers.insert(SERVER_NAME, toml_edit::Item::Table(entry));
+        // Installing over a config written before the rename would otherwise
+        // leave two entries pointing at the same gateway.
+        servers.remove(LEGACY_SERVER_NAME);
         write_toml(&path, &document)?;
         if has_token {
             note = Some(format!(
@@ -561,6 +568,18 @@ fn install_mcp_for(
             action.to_string(),
             Some(definition),
         )?;
+        // Same cleanup as the TOML path: remove the entry an older build wrote,
+        // but only when this app is the one that created it.
+        if view.managed.contains_key(LEGACY_SERVER_NAME) {
+            let view = crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())?;
+            let _ = crate::integrations::edit_mcp_config(
+                path.to_string_lossy().into_owned(),
+                view.revision,
+                LEGACY_SERVER_NAME.to_string(),
+                "remove".to_string(),
+                None,
+            );
+        }
         if has_token {
             note = Some(format!(
                 "The gateway token was written into {} as an Authorization header. That file is plain text — keep it out of any shared folder or repository.",
@@ -835,7 +854,7 @@ mod tests {
         assert!(installed.mcp_installed && installed.mcp_managed);
         let written = fs::read_to_string(home.join(".codex/config.toml")).unwrap();
         assert!(written.contains("model = \"gpt-5\""));
-        assert!(written.contains("[mcp_servers.scholargateway]"));
+        assert!(written.contains("[mcp_servers.scholargate]"));
         // Codex only accepts an environment variable name, so the token itself
         // never reaches the file.
         assert!(written.contains(CODEX_TOKEN_ENV));
@@ -897,7 +916,7 @@ mod tests {
         let written = fs::read_to_string(&path).unwrap();
         assert!(written.starts_with("# user comment\nmodel = \"gpt-5\""));
         assert!(written.contains("[mcp_servers.existing]"));
-        assert!(written.contains("[mcp_servers.scholargateway]"));
+        assert!(written.contains("[mcp_servers.scholargate]"));
         assert_eq!(fs::read_to_string(&backup).unwrap(), original);
 
         let mut document = read_toml(&path).unwrap();
@@ -916,7 +935,7 @@ mod tests {
             .remove(SERVER_NAME);
         write_toml(&path, &document).unwrap();
         let written = fs::read_to_string(&path).unwrap();
-        assert!(!written.contains("scholargateway"));
+        assert!(!written.contains("scholargate"));
         assert!(written.contains("[mcp_servers.existing]"));
         fs::remove_dir_all(root).unwrap();
     }
@@ -988,6 +1007,9 @@ mod tests {
         fs::remove_dir_all(home).unwrap();
     }
 
+    /// Also covers the rename: the marker written here is the pre-rename one,
+    /// so a skill installed by an older build must still be recognised as ours
+    /// and updated rather than treated as somebody else's file.
     #[test]
     fn installing_skills_updates_an_unchanged_managed_old_bundle() {
         let home = fake_home();

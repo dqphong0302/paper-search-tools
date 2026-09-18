@@ -17,7 +17,7 @@ pub async fn search_inspire_hep(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {
@@ -152,7 +152,7 @@ pub async fn search_datacite(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {
@@ -254,7 +254,7 @@ pub async fn search_econbiz(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {
@@ -350,7 +350,7 @@ pub async fn search_eric(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
         .map_err(|e| {

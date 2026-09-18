@@ -400,10 +400,21 @@ pub fn download_directory(db: &crate::db::Database) -> Result<std::path::PathBuf
     {
         return crate::skills::directory(&path);
     }
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "Could not determine the user home directory")?;
-    let path = std::path::PathBuf::from(home).join("Documents/ScholarGateway/Papers");
+    let home = std::path::PathBuf::from(
+        std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .map_err(|_| "Could not determine the user home directory")?,
+    );
+    // The app was called ScholarGateway before, and this default is not stored
+    // in config — so renaming it would silently start writing to a second
+    // folder while the user's existing PDFs sat in the old one. Keep using the
+    // old folder when it is already there.
+    let legacy = home.join("Documents/ScholarGateway/Papers");
+    let path = if legacy.is_dir() {
+        legacy
+    } else {
+        home.join("Documents/ScholarGate/Papers")
+    };
     std::fs::create_dir_all(&path).map_err(|error| error.to_string())?;
     crate::skills::directory(path.to_str().ok_or("Path must be valid UTF-8")?)
 }

@@ -11,7 +11,7 @@ const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 const transport = new StreamableHTTPClientTransport(new URL(url), {
   requestInit: { headers },
 });
-const client = new Client({ name: 'scholargateway-sdk-check', version: '1.0.0' });
+const client = new Client({ name: 'scholargate-sdk-check', version: '1.0.0' });
 
 await client.connect(transport);
 

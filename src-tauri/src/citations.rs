@@ -107,7 +107,7 @@ pub async fn lookup(
     ))?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(12))
-        .user_agent("ScholarGateway-Desktop/1.0 (mailto:dqphong0302@gmail.com)")
+        .user_agent("ScholarGate-Desktop/1.0 (mailto:dqphong0302@gmail.com)")
         .build()
         .map_err(|error| (500, error.to_string()))?;
     let limit = limit.clamp(1, 50);

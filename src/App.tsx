@@ -254,7 +254,7 @@ export const App: React.FC = () => {
       <div className="cockpit-stage">
         <header className="cockpit-top-bar">
           <div className="cockpit-breadcrumb">
-            <span className="breadcrumb-root">ScholarGateway</span>
+            <span className="breadcrumb-root">ScholarGate</span>
             <ChevronRight size={14} style={{ color: 'var(--text-dim)' }} />
             <h1 className="breadcrumb-current">{tabTitles[activeTab]}</h1>
           </div>

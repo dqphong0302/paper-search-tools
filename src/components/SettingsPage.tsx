@@ -1319,7 +1319,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
       {tab === 'clients' && (
         <Card
           title="AI Clients on this machine"
-          subtitle="Install the ScholarGateway MCP server and bundled skills into supported local AI clients"
+          subtitle="Install the ScholarGate MCP server and bundled skills into supported local AI clients"
           icon={<Plug size={16} style={{ color: 'var(--primary-cyan)' }} />}
         >
           <AiClients />
@@ -1358,7 +1358,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span className="field-label" style={{ margin: 0 }}>PDF Download Directory</span>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <input id="download-directory" type="text" style={FIELD_STYLE} value={config.download_directory} onChange={(e) => handleInputChange('download_directory', e.target.value)} placeholder="Default: Documents/ScholarGateway/Papers" />
+                  <input id="download-directory" type="text" style={FIELD_STYLE} value={config.download_directory} onChange={(e) => handleInputChange('download_directory', e.target.value)} placeholder="Default: Documents/ScholarGate/Papers" />
                   {isTauri() && <button id="choose-download-directory" type="button" className="action-btn" onClick={() => void chooseDownloadDirectory()}>Browse…</button>}
                 </div>
               </label>

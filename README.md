@@ -1,8 +1,8 @@
-# 🎓 ScholarGateway Desktop
+# 🎓 ScholarGate Desktop
 
 > **A self-contained native desktop app (Tauri 2 + Rust) with a localhost agent gateway (default `8795`) for AI agents and academic research workspaces.**
 
-ScholarGateway combines two jobs in one fully local app (macOS/Windows/Linux — no Docker, Proxmox or Python required):
+ScholarGate combines two jobs in one fully local app (macOS/Windows/Linux — no Docker, Proxmox or Python required):
 
 1. **For researchers**: multi-source paper search, saving into **per-project workspaces**, notes, a **citation graph**, Zotero/BibTeX export, and in-depth analysis tools (PRISMA / meta-analysis).
 2. **As a portal for AI agents**: a loopback gateway exposing **REST** + **MCP** so agents can call the search tools, read a workspace and write results back into the right project.
@@ -29,7 +29,7 @@ ScholarGateway combines two jobs in one fully local app (macOS/Windows/Linux —
 ### Gateway for AI agents
 - **REST** (`/api/search`, `/api/download`, …), **MCP Streamable HTTP** (`/mcp`, stateless JSON) and legacy-compatible **MCP SSE** (`/sse`, `/messages`).
 - Serves Claude Desktop, Claude Code, Codex, Antigravity, Cursor, Windsurf, OpenClaw, a Python CLI, LangChain…
-- **One-click client setup**: Settings → AI Clients detects the clients installed on this machine, shows whether ScholarGateway is already wired into each one, and installs the MCP entry plus the bundled skills.
+- **One-click client setup**: Settings → AI Clients detects the clients installed on this machine, shows whether ScholarGate is already wired into each one, and installs the MCP entry plus the bundled skills.
 - **Security**: an optional token protects **every** route; API keys and tokens are stored **write-only**; SQLite files are `0600`.
 
 ---
@@ -49,12 +49,12 @@ Testing:
 ```bash
 pnpm build                                                # tsc + vite build
 pnpm test                                                 # Vitest (citations, evaluation, settings UI)
-cargo test --manifest-path src-tauri/Cargo.toml --bin scholargateway
+cargo test --manifest-path src-tauri/Cargo.toml --bin scholargate
 scripts/mcp-smoke.sh http://127.0.0.1:8795 "$MCP_AUTH_TOKEN"   # curl smoke test
 pnpm mcp:check "http://127.0.0.1:8795/mcp" "$MCP_AUTH_TOKEN"   # official MCP SDK
 ```
 
-CI: `.github/workflows/ci.yml` runs the frontend (build + test) on Ubuntu and `cargo test` on macOS. Secrets use the OS keychain; set `SCHOLARGATEWAY_KEYCHAIN=0` to disable it.
+CI: `.github/workflows/ci.yml` runs the frontend (build + test) on Ubuntu and `cargo test` on macOS. Secrets use the OS keychain; set `SCHOLARGATE_KEYCHAIN=0` to disable it.
 
 ---
 
@@ -93,7 +93,7 @@ An agent can only list and read the workspaces it was granted; write permission 
 
 When a **gateway token** is set, every route (`/api/*`, `/mcp`, `/sse`, `/messages`) requires `Authorization: Bearer <token>`; only `/health`, `/api/health` and `GET /api/config` (with secrets filtered out) stay public so the UI can start. API keys and tokens are **write-only**: the backend returns the sentinel `__SG_KEEP__` instead of the real value, and sending the sentinel back is a no-op.
 
-- **Keychain**: secrets live in the **OS keychain** (service `scholargateway`), not in plaintext in SQLite; if the keychain is unavailable the app falls back to SQLite (set `SCHOLARGATEWAY_KEYCHAIN=0` to disable it entirely). Values are cached in-process so the keychain is not read on every request.
+- **Keychain**: secrets live in the **OS keychain** (service `scholargate`), not in plaintext in SQLite; if the keychain is unavailable the app falls back to SQLite (set `SCHOLARGATE_KEYCHAIN=0` to disable it entirely). Values are cached in-process so the keychain is not read on every request.
 - **Rate limit**: `rate_limit_per_minute` (0 = off) limits each agent (by `x-sg-agent`/token) and answers `429` with `Retry-After`.
 - SQLite files and the data directory are `0600`/`0700` (Unix). The gateway binds loopback only and rejects non-loopback Origin/Host headers and DNS rebinding.
 
@@ -103,7 +103,7 @@ Streamable HTTP endpoint: `http://127.0.0.1:8795/mcp` (add the header only if a 
 ```json
 {
   "mcpServers": {
-    "scholargateway": {
+    "scholargate": {
       "type": "http",
       "url": "http://127.0.0.1:8795/mcp",
       "headers": { "Authorization": "Bearer <MCP_AUTH_TOKEN>" }
@@ -112,7 +112,7 @@ Streamable HTTP endpoint: `http://127.0.0.1:8795/mcp` (add the header only if a 
 }
 ```
 
-Codex uses `[mcp_servers.scholargateway]` with the same `/mcp` URL and `bearer_token_env_var = "SCHOLARGATEWAY_TOKEN"`. Antigravity uses its documented SSE shape instead: `{ "serverUrl": "http://127.0.0.1:8795/sse" }`. Drop `headers` when no token is set.
+Codex uses `[mcp_servers.scholargate]` with the same `/mcp` URL and `bearer_token_env_var = "SCHOLARGATEWAY_TOKEN"`. Antigravity uses its documented SSE shape instead: `{ "serverUrl": "http://127.0.0.1:8795/sse" }`. Drop `headers` when no token is set.
 
 **The 8 MCP tools:**
 
@@ -199,7 +199,7 @@ The app detects the clients installed on this machine and reports, per client, w
 | Codex | `~/.codex/config.toml` (TOML) | `~/.codex/skills` |
 | Antigravity | `~/.gemini/antigravity/mcp_config.json` (JSON) | `~/.gemini/antigravity/skills` |
 
-- Install writes one entry named `scholargateway` pointing at `http://127.0.0.1:<port>/mcp`, after backing up the previous file. Nothing else in the file is touched: the TOML editor preserves comments and formatting, and the JSON editor keeps every other key.
+- Install writes one entry named `scholargate` pointing at `http://127.0.0.1:<port>/mcp`, after backing up the previous file. Nothing else in the file is touched: the TOML editor preserves comments and formatting, and the JSON editor keeps every other key.
 - A symlinked config (Antigravity ships one) is resolved to the real file, and the resolved path is what the panel displays.
 - If a gateway token is set, the JSON clients receive an `Authorization` header — a plaintext file then contains the token, which the panel says. Codex only accepts an environment variable name, so it receives `bearer_token_env_var = "SCHOLARGATEWAY_TOKEN"` and the token stays out of the file; export that variable before starting Codex.
 - An entry the app did not create is reported but never overwritten or removed, whatever it is called.
@@ -290,7 +290,7 @@ paper-search-tools/
 - `cargo test` — **76 passed / 5 ignored** (the ignored ones need real network access: Crossref/arXiv/multi-source). Covers: RRF/merge and tie ordering, year filtering, source routing, the arXiv parser, cache/telemetry, REST and MCP pagination over one result set, credential changes, workspace lifecycle (status/favourite/tags), workspace-scoped history deletion, REST workspaces over a real TCP socket, token protection for REST+MCP+SSE, rate limiting, secret sanitisation, citation ID resolution, the web connector fixture, skills/integrations, the source-check endpoint (including that it never answers from cache), AI client detection plus install/remove round trips for both JSON and TOML clients against a throwaway home directory, and the default-workspace rename migration.
 - `pnpm test` — **35 passed** (citation formats, heuristic evaluation, result landscape; React/jsdom regressions for workspace switching, stale responses, load-more and history deletion; settings regressions for source health checks, default sources and the AI client panel).
 - `pnpm build` — TypeScript + Vite pass; `cargo build` is clean with no warnings.
-- **Native bundle E2E** — `ScholarGateway.app` (debug) built and the real binary run: SQLite init, gateway bind, `/health`, `/api/workspaces` and `/mcp tools/list` all pass; with a token: `401` when missing, `200` when correct; `/api/citations` returns real data; `offset` pagination returns different pages.
+- **Native bundle E2E** — `ScholarGate.app` (debug) built and the real binary run: SQLite init, gateway bind, `/health`, `/api/workspaces` and `/mcp tools/list` all pass; with a token: `401` when missing, `200` when correct; `/api/citations` returns real data; `offset` pagination returns different pages.
 - **Official MCP SDK** — `pnpm mcp:check` connects, lists 8 tools and calls catalog/workspace successfully (with and without a token).
 - **Live source checks** — `/api/source/check` exercised against the real services: OpenAlex/Crossref/DOAJ/PubMed/Zenodo/VJOL/VAST/VISTA NASATI answered; Scopus reported a rejected credential (HTTP 401) as "needs setup"; SLJOL reported HTTP 403; arXiv and Semantic Scholar reported their own rate limits.
 - **Not verified**: full GUI click-through E2E; some narrow viewports; gap analysis is still a description of the result set, not a scientific conclusion.

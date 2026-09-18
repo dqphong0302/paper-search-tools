@@ -727,7 +727,7 @@ async fn esearch_ids(
     limit: usize,
 ) -> Result<Vec<String>, String> {
     let url = format!(
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db={}&term={}&retmode=json&retmax={}&tool=ScholarGateway&email=dqphong0302@gmail.com",
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db={}&term={}&retmode=json&retmax={}&tool=ScholarGate&email=dqphong0302@gmail.com",
         db,
         urlencoding::encode(query),
         limit
@@ -752,7 +752,7 @@ async fn esummary(
     label: &str,
 ) -> Result<Value, String> {
     let url = format!(
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db={}&id={}&retmode=json&tool=ScholarGateway&email=dqphong0302@gmail.com",
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db={}&id={}&retmode=json&tool=ScholarGate&email=dqphong0302@gmail.com",
         db,
         ids.join(",")
     );
@@ -1051,7 +1051,7 @@ pub async fn search_sec_edgar(
         .get(&url)
         .header(
             "User-Agent",
-            "ScholarGateway-Desktop/1.0 (mailto:dqphong0302@gmail.com)",
+            "ScholarGate-Desktop/1.0 (mailto:dqphong0302@gmail.com)",
         )
         .header("Accept", "application/json")
         .send()

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   ScholarGateway Desktop — Clean Light Design System
+   ScholarGate Desktop — Clean Light Design System
    Bright, Minimal, Modern, Clutter-Free
    ========================================================================== */
 
@@ -1791,9 +1791,78 @@ a.action-btn:hover {
   background: #f8fafc;
 }
 
-/* Quiet result list, with detail content loaded only on selection. */
-.compact-paper { padding: 16px 0; margin: 0; border: 0; border-bottom: 1px solid var(--cockpit-border); border-radius: 0; box-shadow: none; }
-.compact-paper:hover { box-shadow: none; transform: none; }
+/* Result list, with detail content loaded only on selection.
+   Each result is a contained card. It used to be a bare row separated by a
+   single hairline — no border, radius or background of its own — so fifteen
+   results read as one continuous wall of text and it was hard to see where one
+   paper ended and the next began. A white card on the page's grey keeps the
+   list scannable without going back to heavy chrome. */
+.paper-list { display: flex; flex-direction: column; gap: 12px; }
+
+.compact-paper {
+  margin: 0;
+  /* Padded on every side: the Library uses this same card without a
+     `.paper-footer`, so the bottom padding cannot come from the footer. */
+  padding: 15px 17px;
+  background: var(--cockpit-card);
+  border: 1px solid var(--cockpit-border);
+  border-radius: 12px;
+  /* The theme sets --card-shadow to none, which left the list looking flat.
+     Results are the thing people came for, so they get real elevation and a
+     hover state that responds — the rest of the app stays flat. */
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 2px 6px rgba(15, 23, 42, 0.05);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+.compact-paper:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.05), 0 10px 20px -6px rgba(15, 23, 42, 0.13);
+  transform: translateY(-2px);
+}
+.compact-paper:focus-within { border-color: var(--primary-cyan); }
+.compact-paper.selected {
+  border-color: var(--primary-cyan);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12), 0 8px 20px -6px rgba(15, 23, 42, 0.14);
+}
+
+/* A quiet accent that gives each card a leading edge without a coloured bar. */
+.compact-paper .paper-title-button { transition: color 0.15s ease; }
+.compact-paper:hover .paper-title-button { color: var(--primary-cyan); }
+
+/* Checkbox in its own gutter so every title starts on the same line. */
+.paper-row { display: flex; align-items: flex-start; gap: 12px; }
+.paper-check { accent-color: var(--primary-cyan); margin-top: 5px; flex-shrink: 0; }
+.paper-body { flex: 1; min-width: 0; }
+
+.compact-paper .paper-title { margin: 3px 0 5px; }
+.compact-paper .paper-meta { margin-bottom: 9px; font-size: 12px; color: var(--text-dim); }
+
+/* Keywords are content, not provenance, so they must not look like the source
+   badges above them: rounded, lower contrast, no mono/uppercase treatment. */
+.paper-keywords { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 0; }
+.paper-keyword {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  background: var(--cockpit-border-subtle);
+  border: 1px solid transparent;
+}
+
+/* Scores describe the result, not the paper, so they sit with the actions in a
+   footer rather than competing with the source badges at the top. */
+.paper-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 13px;
+  padding-top: 10px;
+  border-top: 1px solid var(--cockpit-border-subtle);
+}
+.paper-metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.paper-cta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 /* The compact list used to hide every badge, which also hid where a result came
    from and whether it is open access — the two things a multi-source list is for.
    Keep the essentials inline and save the scoring badges for the detail panel. */

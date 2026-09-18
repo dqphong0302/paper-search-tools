@@ -71,15 +71,17 @@ function PaperCardImpl({
         key={paper.id}
         className={`paper-card compact-paper ${isSelected ? 'selected' : ''}`}
       >
-        <div className="paper-header">
+        <div className="paper-row">
           <input
             type="checkbox"
+            className="paper-check"
             checked={isChecked}
             onChange={() => onToggleChecked(paper.id)}
             aria-label={`Select ${paper.title}`}
-            style={{ accentColor: 'var(--primary-cyan)', marginTop: 4, flexShrink: 0 }}
           />
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="paper-body">
+            {/* Provenance only: where this result came from and how reachable it
+                is. Scores moved to the footer so they stop competing with it. */}
             <div className="paper-badges">
               <span className="badge badge-source badge-essential">{paper.source}</span>
               {kind !== 'article' && KIND_META[kind].badge && (
@@ -87,40 +89,11 @@ function PaperCardImpl({
                   {KIND_META[kind].label}
                 </span>
               )}
-              <span className="badge badge-group" title={groupMeta.label}>
-                {groupMeta.shortLabel}
-              </span>
               {isVn && <span className="badge badge-vjol badge-essential">🇻🇳 VIETNAM</span>}
               {paper.open_access && <span className="badge badge-oa badge-essential">OPEN ACCESS</span>}
               {evaluation.recommendedPdf && (
-                <span className="badge badge-pdf-recommended">
-                  <FileCheck2 size={11} /> RECOMMENDED PDF {evaluation.pdfScore}
-                </span>
-              )}
-              <span
-                title="Reading-priority screening score (not a judgement of quality)"
-                className={`badge evidence-${
-                  evaluation.label === 'Recommended'
-                    ? 'strong'
-                    : evaluation.label === 'Consider'
-                    ? 'fair'
-                    : 'review'
-                }`}
-              >
-                <Award size={11} /> SCREENING {evaluation.overall}/100
-              </span>
-              {paper.quartile && <span className="badge badge-q1">{paper.quartile}</span>}
-              {paper.score !== undefined && (
-                <span
-                  className="badge"
-                  title="Multi-source fusion score (Reciprocal Rank Fusion)"
-                  style={{
-                    background: '#f1f5f9',
-                    color: 'var(--text-muted)',
-                    border: '1px solid var(--cockpit-border)',
-                  }}
-                >
-                  RRF {paper.score.toFixed(3)}
+                <span className="badge badge-pdf-recommended badge-essential">
+                  <FileCheck2 size={11} /> RECOMMENDED PDF
                 </span>
               )}
             </div>
@@ -137,80 +110,116 @@ function PaperCardImpl({
                 {paper.title}
               </button>
             </h3>
+
+            <div className="paper-meta">
+              <span>
+                {paper.authors.slice(0, 3).join(', ')}
+                {paper.authors.length > 3 ? ' et al.' : ''}
+              </span>
+              {paper.year && <span>· {paper.year}</span>}
+              {paper.venue && (
+                <span>
+                  · <i>{paper.venue}</i>
+                </span>
+              )}
+              {isSelected && paper.citations != null && (
+                <span>
+                  · Citations: <b>{paper.citations}</b>
+                </span>
+              )}
+              {isSelected && paper.doi && (
+                <span>
+                  · DOI:{' '}
+                  <a
+                    href={`https://doi.org/${paper.doi}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: 'var(--primary-cyan)', textDecoration: 'none' }}
+                  >
+                    {paper.doi}
+                  </a>
+                </span>
+              )}
+            </div>
+
+            <p className="paper-abstract" style={{ margin: 0 }}>
+              <b>Abstract: </b>
+              {abstract
+                ? `${abstract.slice(0, 240).trimEnd()}${abstract.length > 240 ? '…' : ''}`
+                : 'The source provided no abstract.'}
+            </p>
+
+            {keywords.length > 0 && (
+              <div
+                className="paper-keywords"
+                title="Keywords suggested from the title and abstract"
+              >
+                {keywords.map((keyword) => (
+                  <span key={keyword} className="paper-keyword">
+                    {keyword}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="paper-footer">
+          <div className="paper-metrics">
+            <span className="badge badge-group" title={groupMeta.label}>
+              {groupMeta.shortLabel}
+            </span>
+            <span
+              title="Reading-priority screening score (not a judgement of quality)"
+              className={`badge evidence-${
+                evaluation.label === 'Recommended'
+                  ? 'strong'
+                  : evaluation.label === 'Consider'
+                  ? 'fair'
+                  : 'review'
+              }`}
+            >
+              <Award size={11} /> SCREENING {evaluation.overall}/100
+            </span>
+            {paper.quartile && <span className="badge badge-q1">{paper.quartile}</span>}
+            {paper.score !== undefined && (
+              <span
+                className="badge"
+                title="Multi-source fusion score (Reciprocal Rank Fusion)"
+                style={{
+                  background: '#f1f5f9',
+                  color: 'var(--text-dim)',
+                  border: '1px solid var(--cockpit-border)',
+                }}
+              >
+                RRF {paper.score.toFixed(3)}
+              </span>
+            )}
           </div>
 
-          <button
-            className={`action-btn ${isSaved ? 'action-btn-primary' : ''}`}
-            onClick={() => onSavePaper(paper)}
-            title={isSaved ? 'Remove from interest list' : 'Add this paper to the interest list'}
-            aria-label={isSaved ? 'Remove from interest list' : 'Add this paper to the interest list'}
-            style={{ flexShrink: 0 }}
-          >
-            <Bookmark size={14} fill={isSaved ? '#ffffff' : 'none'} />
-            <span>{isSaved ? 'In interest list' : 'Interest'}</span>
-          </button>
-
-          {originalPaperUrl(paper) && (
-            <a
-              className="action-btn"
-              href={originalPaperUrl(paper)!}
-              target="_blank"
-              rel="noreferrer"
-              title="Open the paper at its original page"
+          <div className="paper-cta">
+            <button
+              className={`action-btn ${isSaved ? 'action-btn-primary' : ''}`}
+              onClick={() => onSavePaper(paper)}
+              title={isSaved ? 'Remove from interest list' : 'Add this paper to the interest list'}
+              aria-label={isSaved ? 'Remove from interest list' : 'Add this paper to the interest list'}
             >
-              <ExternalLink size={13} />
-              <span>Original page</span>
-            </a>
-          )}
-        </div>
+              <Bookmark size={14} fill={isSaved ? '#ffffff' : 'none'} />
+              <span>{isSaved ? 'In interest list' : 'Interest'}</span>
+            </button>
 
-        <div className="paper-meta">
-          <span>
-            {paper.authors.slice(0, 3).join(', ')}
-            {paper.authors.length > 3 ? ' et al.' : ''}
-          </span>
-          {paper.year && <span>• {paper.year}</span>}
-          {paper.venue && (
-            <span>
-              • <i>{paper.venue}</i>
-            </span>
-          )}
-          {isSelected && paper.citations != null && (
-            <span>
-              • Citations: <b>{paper.citations}</b>
-            </span>
-          )}
-          {isSelected && paper.doi && (
-            <span>
-              • DOI:{' '}
+            {originalPaperUrl(paper) && (
               <a
-                href={`https://doi.org/${paper.doi}`}
+                className="action-btn"
+                href={originalPaperUrl(paper)!}
                 target="_blank"
                 rel="noreferrer"
-                style={{ color: 'var(--primary-cyan)', textDecoration: 'none' }}
+                title="Open the paper at its original page"
               >
-                {paper.doi}
+                <ExternalLink size={13} />
+                <span>Original page</span>
               </a>
-            </span>
-          )}
-        </div>
-
-        <div style={{ display: 'grid', gap: 7, marginTop: 9 }}>
-          <p className="paper-abstract" style={{ margin: 0 }}>
-            <b>Abstract: </b>
-            {abstract ? `${abstract.slice(0, 240).trimEnd()}${abstract.length > 240 ? '…' : ''}` : 'The source provided no abstract.'}
-          </p>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: 11 }}>
-            <span className="badge badge-group">{KIND_META[kind].label}</span>
-            <span className="badge badge-group">{groupMeta.label}</span>
-            <span className={`badge ${paper.quartile ? 'badge-q1' : ''}`} title="Quartile is shown only when the source provides it">
-              Journal: {paper.quartile || 'no quartile data'}
-            </span>
-            {keywords.map((keyword) => (
-              <span key={keyword} className="settings-source-pill" title="Keywords suggested from the title and abstract">
-                {keyword}
-              </span>
-            ))}
+            )}
           </div>
         </div>
 

@@ -278,6 +278,28 @@ fn join_tags(tags: &[String]) -> String {
     cleaned.join(",")
 }
 
+/// Moves a pre-rename data directory to the current one.
+///
+/// This directory holds the entire library — saved papers, workspaces, notes,
+/// history and settings — so renaming the app without moving it would look
+/// exactly like losing everything. The move only runs when the new directory
+/// does not exist yet, and a failure is deliberately not fatal: the app then
+/// starts on an empty directory and the old one is still on disk, untouched,
+/// rather than the app refusing to launch.
+fn adopt_legacy_data_dir(legacy: &std::path::Path, current: &std::path::Path) {
+    if current.exists() || !legacy.is_dir() {
+        return;
+    }
+    if let Err(error) = std::fs::rename(legacy, current) {
+        eprintln!(
+            "Could not move {} to {}: {error}. Starting with an empty library; \
+             the previous data is still in the old directory.",
+            legacy.display(),
+            current.display()
+        );
+    }
+}
+
 fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -419,17 +441,22 @@ impl Database {
     }
 
     pub fn init() -> Result<Self, String> {
-        let db_dir = match std::env::var("SCHOLARGATEWAY_DATA_DIR") {
+        // The old variable name still works for anyone who scripted against it.
+        let configured = std::env::var("SCHOLARGATE_DATA_DIR")
+            .or_else(|_| std::env::var("SCHOLARGATEWAY_DATA_DIR"));
+        let db_dir = match configured {
             Ok(path) => crate::skills::directory(&path)?,
             Err(std::env::VarError::NotPresent) => {
                 let home = std::env::var("HOME")
                     .or_else(|_| std::env::var("USERPROFILE"))
                     .map_err(|_| "Cannot locate user data directory")?;
-                let path = PathBuf::from(home).join(".scholargateway");
+                let home = PathBuf::from(home);
+                let path = home.join(".scholargate");
+                adopt_legacy_data_dir(&home.join(".scholargateway"), &path);
                 std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
                 path
             }
-            Err(_) => return Err("SCHOLARGATEWAY_DATA_DIR must be UTF-8".into()),
+            Err(_) => return Err("SCHOLARGATE_DATA_DIR must be UTF-8".into()),
         };
         let db_path = db_dir.join("library.db");
         // Credentials live in this SQLite file, so keep it owner-only instead of
