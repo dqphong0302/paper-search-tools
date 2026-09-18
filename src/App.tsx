@@ -9,6 +9,7 @@ import { ChevronRight, RefreshCw, Search, Settings, WifiOff } from 'lucide-react
 import { DEFAULT_GATEWAY_PORT, gatewayFetch, initGateway } from './lib/gateway';
 import { readSettings, saveSettings, SettingsAuthRequired } from './lib/settings';
 import { TopicSetupModal } from './components/TopicSetupModal';
+import { isTauri } from '@tauri-apps/api/core';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('search');
@@ -32,6 +33,40 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     void initGateway().then(setPort);
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        let accepted = false;
+        try {
+          const { check } = await import('@tauri-apps/plugin-updater');
+          const update = await check({ timeout: 30_000 });
+          if (!update) return;
+
+          accepted = window.confirm(
+            `ScholarGate ${update.version} is available. Download and install it now?`
+          );
+          if (!accepted) {
+            await update.close();
+            return;
+          }
+
+          await update.downloadAndInstall();
+          const { relaunch } = await import('@tauri-apps/plugin-process');
+          await relaunch();
+        } catch (error) {
+          console.error('Automatic update check failed', error);
+          if (accepted) {
+            window.alert('ScholarGate could not install the update. Please try again later.');
+          }
+        }
+      })();
+    }, 3_000);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {

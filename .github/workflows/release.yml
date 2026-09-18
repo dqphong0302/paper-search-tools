@@ -21,10 +21,10 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
           - os: macos-latest
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app,dmg
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis,msi
@@ -54,11 +54,14 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ScholarGate ${{ github.ref_name }}
           releaseBody: |
-            ScholarGate Desktop with corrected Antigravity 2.0/IDE/CLI paths,
+            ScholarGate Desktop now checks for signed updates automatically at startup.
+            This release also includes corrected Antigravity 2.0/IDE/CLI paths,
             cross-platform Windows client detection, and an explicit choice to
             minimize to tray or quit when closing the main window.
 
@@ -67,6 +70,7 @@ jobs:
             These builds are unsigned and the macOS builds are not notarized. Your operating system may display a security warning.
           releaseDraft: true
           prerelease: false
+          updaterJsonPreferNsis: true
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
   publish:
     needs: build
