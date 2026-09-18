@@ -63,8 +63,6 @@ export const CockpitDashboard: React.FC<CockpitDashboardProps> = ({
             cfg.enabled_sources
               .split(',')
               .map((s: string) => s.trim().toLowerCase())
-              .map((s: string) => (s === 'vjol' ? 'vietnam' : s))
-              .map((s: string) => (s === 'searxng' ? 'metasearch' : s))
               .filter(Boolean)
           );
         } else setEnabledSources(searchCatalog.presets.find((item) => item.id === preset)?.sources ?? []);
@@ -110,7 +108,7 @@ export const CockpitDashboard: React.FC<CockpitDashboardProps> = ({
       {/* Header */}
       <div className="page-header">
         <div>
-          <h2 className="dashboard-brand-title">ScholarGateway</h2>
+          <h2 className="dashboard-brand-title">ScholarGate</h2>
           <p className="page-subtitle">Multidisciplinary Academic Discovery & AI Agent Gateway</p>
         </div>
       </div>

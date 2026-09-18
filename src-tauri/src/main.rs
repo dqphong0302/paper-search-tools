@@ -1,29 +1,30 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod db;
+mod agents;
 mod catalog;
-mod engine;
-mod models;
-mod mcp;
-mod skills;
-mod integrations;
-mod clients;
-mod details;
 mod citations;
+mod clients;
 mod config;
+mod db;
+mod details;
+mod engine;
+mod integrations;
+mod mcp;
+mod models;
+mod query;
 mod secrets;
 mod security;
-mod agents;
 mod server;
-mod web_search;
+mod skills;
 mod sources;
+mod web_search;
 
 use db::Database;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, State,
+    AppHandle, Emitter, Manager, State,
 };
 
 // The desktop UI talks to the gateway over HTTP/REST; Tauri IPC is only used for
@@ -34,7 +35,9 @@ struct AppSharedState {
 }
 
 #[tauri::command]
-fn get_gateway_port(state: State<'_, AppSharedState>) -> u16 { state.port }
+fn get_gateway_port(state: State<'_, AppSharedState>) -> u16 {
+    state.port
+}
 
 #[tauri::command]
 fn read_settings(state: State<'_, AppSharedState>) -> serde_json::Value {
@@ -50,8 +53,26 @@ fn get_gateway_token(state: State<'_, AppSharedState>) -> String {
 }
 
 #[tauri::command]
-fn save_settings(payload: serde_json::Value, state: State<'_, AppSharedState>) -> Result<(), String> {
-    state.db.set_config_patch(&config::validate_patch(payload)?).map_err(|error| error.to_string())
+fn save_settings(
+    payload: serde_json::Value,
+    state: State<'_, AppSharedState>,
+) -> Result<(), String> {
+    state
+        .db
+        .set_config_patch(&config::validate_patch(payload)?)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn choose_download_directory() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .set_title("Choose PDF download directory")
+            .pick_folder()
+            .map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|error| error.to_string())
 }
 
 /// A site the app can sign into with its own browser window.
@@ -188,7 +209,7 @@ async fn open_service_login(app: AppHandle, service: String) -> Result<(), Strin
         if (reported) return;
         reported = true;
         var payload = JSON.stringify({{ token: token || "", cookie: cookie || "" }});
-        window.location.href = "https://" + window.location.hostname + "/__scholargateway_session__?data=" + encodeURIComponent(payload);
+        window.location.href = "https://" + window.location.hostname + "/__scholargate_session__?data=" + encodeURIComponent(payload);
       }}
 
       setInterval(checkSession, 1500);
@@ -196,7 +217,8 @@ async fn open_service_login(app: AppHandle, service: String) -> Result<(), Strin
     "#,
         host = serde_json::to_string(target.host).unwrap_or_else(|_| "\"\"".into()),
         login_paths = serde_json::to_string(target.login_paths).unwrap_or_else(|_| "[]".into()),
-        cookie_needle = serde_json::to_string(target.cookie_needle).unwrap_or_else(|_| "\"\"".into()),
+        cookie_needle =
+            serde_json::to_string(target.cookie_needle).unwrap_or_else(|_| "\"\"".into()),
     );
 
     let app_handle = app.clone();
@@ -209,7 +231,7 @@ async fn open_service_login(app: AppHandle, service: String) -> Result<(), Strin
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15")
         .initialization_script(&script)
         .on_navigation(move |nav_url| {
-            if nav_url.path() == "/__scholargateway_session__" {
+            if nav_url.path() == "/__scholargate_session__" {
                 if let Some((_, encoded)) = nav_url.query_pairs().find(|(k, _)| k == "data") {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&encoded) {
                         let token = val.get("token").and_then(|v| v.as_str()).unwrap_or("");
@@ -225,7 +247,9 @@ async fn open_service_login(app: AppHandle, service: String) -> Result<(), Strin
                                 let state = app_handle.state::<AppSharedState>();
                                 let mut patch = std::collections::BTreeMap::new();
                                 patch.insert(key, session_val);
-                                let _ = state.db.set_config_patch(&patch);
+                                if state.db.set_config_patch(&patch).is_ok() {
+                                    let _ = app_handle.emit("settings-session-updated", &service_name);
+                                }
                             }
                         }
                     }
@@ -243,7 +267,11 @@ async fn open_service_login(app: AppHandle, service: String) -> Result<(), Strin
 }
 
 #[tauri::command]
-fn save_service_session(service: String, session: String, state: State<'_, AppSharedState>) -> Result<(), String> {
+fn save_service_session(
+    service: String,
+    session: String,
+    state: State<'_, AppSharedState>,
+) -> Result<(), String> {
     let key = session_key(&service).ok_or("Invalid service")?;
     let mut patch = std::collections::BTreeMap::new();
     patch.insert(key, session.trim().to_string());
@@ -263,7 +291,7 @@ fn clear_service_session(service: String, state: State<'_, AppSharedState>) -> R
 /// client it wants set up.
 #[tauri::command]
 fn list_ai_clients(state: State<'_, AppSharedState>) -> Vec<clients::ClientStatus> {
-    clients::list(state.port)
+    clients::list(config::gateway_port(&state.db))
 }
 
 #[tauri::command]
@@ -272,12 +300,17 @@ fn setup_ai_client(
     action: String,
     state: State<'_, AppSharedState>,
 ) -> Result<clients::ClientStatus, String> {
-    let token = state.db.get_config("mcp_auth_token").filter(|token| !token.trim().is_empty());
+    let token = state
+        .db
+        .get_config("mcp_auth_token")
+        .filter(|token| !token.trim().is_empty());
+    let configured_port = config::gateway_port(&state.db);
     match action.as_str() {
-        "install_mcp" => clients::install_mcp(&client, state.port, token),
-        "remove_mcp" => clients::remove_mcp(&client, state.port),
-        "install_skills" => clients::install_skills(&client, state.port),
-        "remove_skills" => clients::remove_skills(&client, state.port),
+        "install_all" => clients::install_all(&client, configured_port, token),
+        "install_mcp" => clients::install_mcp(&client, configured_port, token),
+        "remove_mcp" => clients::remove_mcp(&client, configured_port),
+        "install_skills" => clients::install_skills(&client, configured_port),
+        "remove_skills" => clients::remove_skills(&client, configured_port),
         _ => Err("Unsupported action".to_string()),
     }
 }
@@ -304,13 +337,15 @@ fn main() {
         .manage(AppSharedState { db, port })
         .setup(|app| {
             // Build System Tray Menu
-            let quit_i =
-                MenuItem::with_id(app, "quit", "Quit ScholarGateway", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "Open ScholarGateway", true, None::<&str>)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit ScholarGate", true, None::<&str>)?;
+            let show_i = MenuItem::with_id(app, "show", "Open ScholarGate", true, None::<&str>)?;
             let status_i = MenuItem::with_id(
                 app,
                 "status",
-                format!("Gateway: port {} — see status in the app", app.state::<AppSharedState>().port),
+                format!(
+                    "Gateway: port {} — see status in the app",
+                    app.state::<AppSharedState>().port
+                ),
                 false,
                 None::<&str>,
             )?;
@@ -319,7 +354,7 @@ fn main() {
 
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("ScholarGateway Desktop — Localhost Agent Gateway")
+                .tooltip("ScholarGate Desktop — Localhost Agent Gateway")
                 .on_menu_event(|app: &AppHandle, event| match event.id.as_ref() {
                     "quit" => {
                         app.exit(0);
@@ -362,6 +397,7 @@ fn main() {
             get_gateway_token,
             read_settings,
             save_settings,
+            choose_download_directory,
             skills::preview_skill,
             skills::install_skill,
             skills::list_skills,

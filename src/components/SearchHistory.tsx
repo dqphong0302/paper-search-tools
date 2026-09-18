@@ -78,7 +78,7 @@ export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, por
   }, [port, workspaceId]);
 
   const handleClear = async () => {
-    if (!window.confirm(`Clear all search history ${workspaceId ? 'in this workspace' : 'across all workspaces'}? This cannot be undone.`))
+    if (!window.confirm('Clear all search history? This cannot be undone.'))
       return;
     setError(null);
     try {

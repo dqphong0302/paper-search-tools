@@ -1,27 +1,22 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Search,
-  Download,
-  Bookmark,
-  Copy,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
   Check,
   Sparkles,
   AlertTriangle,
   Compass,
+  ExternalLink,
   Loader2,
   CheckCircle2,
   XCircle,
-  Award,
-  FileCheck2,
-  GitBranch,
   Calendar,
   Layers,
   PauseCircle,
   Settings,
   X,
+  Bot,
+  Filter,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Paper, SearchResponse } from '../types';
 import { SearchScanner } from './SearchScanner';
@@ -31,8 +26,22 @@ import { evaluatePaper, getSourceGroup, SOURCE_GROUPS, SourceGroup } from '../li
 import { apaCitation, bibtexCitation } from '../lib/citation';
 import { getPaperKind, KIND_META, PaperKind } from '../lib/paperKind';
 import { gatewayFetch } from '../lib/gateway';
+import { useSelection } from '../lib/useSelection';
+import { bibtexLibrary, risLibrary } from '../lib/citation';
+import { SourceLimiterModal } from './SourceLimiterModal';
+import { FulltextViewerModal } from './FulltextViewerModal';
+import { AiAgentExportModal } from './AiAgentExportModal';
 
 import searchCatalog from '../lib/searchCatalog.json';
+import { PaperCard } from './PaperCard';
+import {
+  CitationDirection, CitationState, isVietnamPaper, originalPaperUrl,
+  suggestedKeywords,
+} from './Explorer.shared';
+
+// Re-exported: these moved to Explorer.shared so PaperCard can use them without
+// importing the component that renders it. Existing importers are unaffected.
+export { isVietnamPaper, originalPaperUrl, suggestedKeywords };
 
 /** Source errors already start with the source name; do not print it twice. */
 function sourceMessage(name: string, error?: string | null, fallback = 'unknown error'): string {
@@ -45,31 +54,63 @@ function sourceMessage(name: string, error?: string | null, fallback = 'unknown 
 }
 
 type Scope = string;
-type SourceFilter = 'all' | SourceGroup;
+type SourceFilter = 'all' | SourceGroup | 'interested';
 type SortKey = 'relevance' | 'evaluation' | 'pdf' | 'year' | 'citations';
-type CitationDirection = 'cited_by' | 'references' | 'related';
+type MeshField = 'mh' | 'majr' | 'tiab' | 'ti' | 'all';
 
-interface CitationState {
-  direction: CitationDirection;
-  loading: boolean;
-  error: string | null;
-  items: Paper[];
+interface MeshGroup {
+  terms: string;
+  field: MeshField;
 }
 
-// Only presets backed by at least one supported source are selectable.
-const AVAILABLE_PRESETS = searchCatalog.presets.filter((p) => p.sources.length > 0);
+interface QueryPreviewItem {
+  id: string;
+  mode: 'pubmed_mesh' | 'europe_pmc' | 'arxiv' | 'native_boolean' | 'plain_keywords';
+  query: string;
+  notes: string;
+}
+
+export function buildMeshQuery(
+  groups: MeshGroup[],
+  operator: 'AND' | 'OR',
+  exclusions: string,
+  explode: boolean
+): string {
+  const tagged = (raw: string, field: MeshField) => {
+    const value = raw.trim();
+    if (!value) return '';
+    const term = /\s/.test(value) && !(value.startsWith('"') && value.endsWith('"')) ? `"${value}"` : value;
+    if (field === 'all') return term;
+    const tag = field === 'mh' && !explode ? 'mh:noexp' : field;
+    return `${term}[${tag}]`;
+  };
+  const clauses = groups
+    .map((group) => group.terms.split(/[|\n]/).map((term) => tagged(term, group.field)).filter(Boolean))
+    .filter((terms) => terms.length > 0)
+    .map((terms) => (terms.length > 1 ? `(${terms.join(' OR ')})` : terms[0]));
+  const excluded = exclusions
+    .split(/[|\n]/)
+    .map((term) => tagged(term, 'all'))
+    .filter(Boolean);
+  const positive = clauses.join(` ${operator} `);
+  if (!positive) return '';
+  return excluded.length
+    ? `${positive} NOT ${excluded.length > 1 ? `(${excluded.join(' OR ')})` : excluded[0]}`
+    : positive;
+}
+
+const AVAILABLE_SOURCE_IDS = new Set(searchCatalog.sources.filter((source) => source.available !== false).map((source) => source.id));
+// Hide empty/unsearchable groups and count only sources the current build can query.
+const AVAILABLE_PRESETS = searchCatalog.presets
+  .map((preset) => ({ ...preset, sources: preset.sources.filter((id) => AVAILABLE_SOURCE_IDS.has(id)) }))
+  .filter((preset) => preset.sources.length > 0);
 const SCOPES = [
-  { id: 'default', label: 'Per Settings', title: 'Use domains and sources configured in Settings' },
+  { id: 'default', label: 'Default (Settings)', title: 'Use the source selection from Settings' },
   ...AVAILABLE_PRESETS.map((p) => ({ id: p.id, label: p.label, title: p.description })),
 ];
-const QUICK_DISCIPLINES = ['cs_ai', 'engineering', 'medical', 'natural_sciences', 'economics', 'social_sciences', 'education', 'law', 'environment', 'agriculture', 'vietnam_academic', 'multidisciplinary']
+const QUICK_DISCIPLINES = ['vietnam', 'biomedical', 'ai_cs', 'stem_nature', 'social_humanities', 'evidence_review', 'patents_gov', 'global_regional', 'open_access', 'preprints']
   .map(id => AVAILABLE_PRESETS.find(p => p.id === id)!)
   .filter(Boolean);
-
-// Vietnam papers indexed through the national repository filter
-export const isVietnamPaper = (paper: Paper): boolean => getSourceGroup(paper) === 'vietnam';
-
-const ABSTRACT_CLAMP = 280;
 
 interface ExplorerProps {
   onSavePaper: (paper: Paper) => void;
@@ -81,8 +122,7 @@ interface ExplorerProps {
   port: number;
   /** The app-shell omnibox is the single search entry, so hide the in-page one. */
   hideSearchBar?: boolean;
-  /** Active research workspace; queries and downloads are logged against it. */
-  workspaceId?: string;
+  initialScope?: string;
 }
 
 export const Explorer: React.FC<ExplorerProps> = ({
@@ -94,7 +134,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
   searchNonce = 0,
   port,
   hideSearchBar = false,
-  workspaceId,
+  initialScope = 'default',
 }) => {
   const [localQuery, setQuery] = useState(initialQuery || '');
   const query = draftQuery ?? localQuery;
@@ -104,10 +144,13 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const detailRef = useRef<HTMLElement>(null);
   const detailTrigger = useRef<HTMLButtonElement | null>(null);
-  const closeDetails = () => {
+  // Every handler a PaperCard receives is wrapped so its identity is stable:
+  // otherwise a new closure on each render would defeat the card's `memo` and
+  // the extraction would buy nothing.
+  const closeDetails = useCallback(() => {
     setSelectedId(null);
     detailTrigger.current?.focus();
-  };
+  }, []);
   useEffect(() => {
     if (selectedId) detailRef.current?.focus();
   }, [selectedId]);
@@ -115,38 +158,103 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadSuccessId, setDownloadSuccessId] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  // A blocked download is not a dead end, so the banner carries the article it
+  // failed on and offers its page.
+  const [downloadError, setDownloadError] = useState<{ message: string; paper?: Paper } | null>(null);
   const [oaOnly, setOaOnly] = useState(false);
   const [recommendedPdfOnly, setRecommendedPdfOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('relevance');
   const [citationOpen, setCitationOpen] = useState<Record<string, boolean>>({});
   const [citations, setCitations] = useState<Record<string, CitationState>>({});
 
+  // Source Limiter Modal State
+  const [sourceLimiterOpen, setSourceLimiterOpen] = useState(false);
+  const [customSources, setCustomSources] = useState<string[]>([]);
+
+  // Fulltext Viewer Modal State
+  const [readerPaper, setReaderPaper] = useState<Paper | null>(null);
+  const [readerOpen, setReaderOpen] = useState(false);
+
+  // AI Agent Export Modal State
+  const [agentExportModalOpen, setAgentExportModalOpen] = useState(false);
+  const [agentExportPapers, setAgentExportPapers] = useState<Paper[]>([]);
+
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [kindFilter, setKindFilter] = useState<'all' | PaperKind>('all');
-  const [searchScope, setSearchScope] = useState<Scope>('default');
+  const [searchScope, setSearchScope] = useState<Scope>(AVAILABLE_PRESETS.some((preset) => preset.id === initialScope) ? initialScope : 'default');
   const [yearMin, setYearMin] = useState('');
   const [yearMax, setYearMax] = useState('');
   const [resultLimit, setResultLimit] = useState('');
+  const [meshGroups, setMeshGroups] = useState<MeshGroup[]>([
+    { terms: '', field: 'mh' },
+    { terms: '', field: 'tiab' },
+  ]);
+  const [meshOperator, setMeshOperator] = useState<'AND' | 'OR'>('AND');
+  const [meshExclusions, setMeshExclusions] = useState('');
+  const [meshExplode, setMeshExplode] = useState(true);
+  const [queryPreview, setQueryPreview] = useState<QueryPreviewItem[]>([]);
   const searchOptionsRef = useRef<HTMLDetailsElement>(null);
   const latestSearchId = useRef(0);
   const completedSearch = useRef<{ id: number; body: string; offset: number } | null>(null);
   const loadingMoreRequest = useRef<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const generatedMeshQuery = useMemo(
+    () => buildMeshQuery(meshGroups, meshOperator, meshExclusions, meshExplode),
+    [meshGroups, meshOperator, meshExclusions, meshExplode]
+  );
+
+  useEffect(() => {
+    if (!generatedMeshQuery) {
+      setQueryPreview([]);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const sources = customSources.length
+        ? customSources
+        : searchScope === 'default'
+        ? undefined
+        : [searchScope];
+      void gatewayFetch('/api/query/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: generatedMeshQuery, sources }),
+      })
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((data) => setQueryPreview(Array.isArray(data?.sources) ? data.sources : []))
+        .catch(() => setQueryPreview([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [generatedMeshQuery, customSources, searchScope]);
+
+  useEffect(() => {
+    if (!results && customSources.length === 0 && AVAILABLE_PRESETS.some((preset) => preset.id === initialScope)) {
+      setSearchScope(initialScope);
+    }
+  }, [initialScope, results, customSources.length]);
 
   useEffect(() => () => { ++latestSearchId.current; }, []);
 
   const runSearch = useCallback(
-    async (searchQuery: string, scope: Scope, openAccessOnly = oaOnly, limitOverride?: number) => {
+    async (
+      searchQuery: string,
+      scope: Scope,
+      openAccessOnly = oaOnly,
+      limitOverride?: number,
+      explicitSources = customSources
+    ) => {
       const q = searchQuery.trim();
       if (!q) {
-        setError('Please enter a query, author name, or DOI before searching.');
+        setError('Enter a keyword, author name or DOI before searching.');
         return;
       }
-      if ((yearMin && !/^\d{4}$/.test(yearMin)) || (yearMax && !/^\d{4}$/.test(yearMax)) ||
-          (yearMin && yearMax && Number(yearMin) > Number(yearMax)) ||
-          (resultLimit && (!Number.isInteger(Number(resultLimit)) || Number(resultLimit) < 1 || Number(resultLimit) > 50))) {
-        setError('Please enter valid 4-digit years (start year ≤ end year) and a limit between 1 and 50.');
+      if (
+        (yearMin && !/^\d{4}$/.test(yearMin)) ||
+        (yearMax && !/^\d{4}$/.test(yearMax)) ||
+        (yearMin && yearMax && Number(yearMin) > Number(yearMax)) ||
+        (resultLimit &&
+          (!Number.isInteger(Number(resultLimit)) || Number(resultLimit) < 1 || Number(resultLimit) > 50))
+      ) {
+        setError('Enter valid four-digit years (start ≤ end) and a limit between 1 and 50.');
         return;
       }
       const requestId = ++latestSearchId.current;
@@ -160,14 +268,20 @@ export const Explorer: React.FC<ExplorerProps> = ({
       setError(null);
 
       try {
+        const sourcesParam =
+          explicitSources.length > 0
+            ? explicitSources
+            : scope === 'default'
+            ? undefined
+            : [scope];
+
         const body = JSON.stringify({
           query: q,
           limit: limitOverride ?? (resultLimit ? Number(resultLimit) : undefined),
           year_min: yearMin ? Number(yearMin) : undefined,
           year_max: yearMax ? Number(yearMax) : undefined,
           open_access_only: openAccessOnly,
-          sources: scope === 'default' ? undefined : [scope],
-          workspace_id: workspaceId || undefined,
+          sources: sourcesParam,
         });
         const res = await gatewayFetch('/api/search', {
           method: 'POST',
@@ -187,21 +301,21 @@ export const Explorer: React.FC<ExplorerProps> = ({
         setResults(null);
         setError(
           err instanceof TypeError
-            ? `Cannot connect to local gateway at 127.0.0.1:${port}. Please check if the gateway is running.`
+            ? `Could not reach the gateway at 127.0.0.1:${port}. Check that it is running.`
             : (err as Error).message || 'Search failed.'
         );
       } finally {
         if (requestId === latestSearchId.current) setLoading(false);
       }
     },
-    [port, yearMin, yearMax, resultLimit, oaOnly, workspaceId]
+    [port, yearMin, yearMax, resultLimit, oaOnly, customSources]
   );
 
   // A query pushed in from another tab (dashboard, history) always re-runs.
   useEffect(() => {
     if (initialQuery && initialQuery.trim()) {
       setQuery(initialQuery);
-      runSearch(initialQuery, searchScope);
+      runSearch(initialQuery, searchScope, oaOnly, undefined, customSources);
     } else {
       ++latestSearchId.current;
       completedSearch.current = null;
@@ -214,29 +328,50 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   const handleScopeChange = (scope: Scope) => {
     setSearchScope(scope);
+    // Clear explicit custom source overrides when user selects a preset directly
+    setCustomSources([]);
+  };
+
+  const handleApplyCustomSources = (sources: string[]) => {
+    setCustomSources(sources);
+    if (query.trim()) {
+      void runSearch(query, searchScope, oaOnly, undefined, sources);
+    }
   };
 
   const submitSearch = () => {
     if (onSubmitQuery) onSubmitQuery(query);
-    else void runSearch(query, searchScope);
+    else void runSearch(query, searchScope, oaOnly, undefined, customSources);
   };
 
-  const toggleAbstract = (id: string) =>
-    setExpandedAbstracts((prev) => ({ ...prev, [id]: !prev[id] }));
+  const applyMeshSearch = () => {
+    if (!generatedMeshQuery) return;
+    if (onSubmitQuery) onSubmitQuery(generatedMeshQuery);
+    else {
+      setQuery(generatedMeshQuery);
+      void runSearch(generatedMeshQuery, searchScope, oaOnly, undefined, customSources);
+    }
+  };
 
-  const copyCitation = (paper: Paper, format: 'apa' | 'bibtex' = 'apa') => {
+  const toggleAbstract = useCallback(
+    (id: string) => setExpandedAbstracts((prev) => ({ ...prev, [id]: !prev[id] })),
+    []
+  );
+
+  const copyCitation = useCallback((paper: Paper, format: 'apa' | 'bibtex' = 'apa') => {
     const citation = format === 'bibtex' ? bibtexCitation(paper) : apaCitation(paper);
-    navigator.clipboard.writeText(citation).then(() => {
-      setCopiedId(`${paper.id}:${format}`);
-      setTimeout(() => setCopiedId(null), 2000);
-    }).catch(() => setError('Unable to copy citation to clipboard.'));
-  };
+    navigator.clipboard
+      .writeText(citation)
+      .then(() => {
+        setCopiedId(`${paper.id}:${format}`);
+        setTimeout(() => setCopiedId(null), 2000);
+      })
+      .catch(() => setError('Could not copy the citation to the clipboard.'));
+  }, []);
 
-  // OA filtering happens on the server so the returned page is a full page of
-  // open-access papers instead of a client-side trim of an already-capped list.
   const handleOaToggle = (next: boolean) => {
     setOaOnly(next);
-    if (query.trim()) runSearch(query, searchScope, next);
+    if (query.trim()) runSearch(query, searchScope, next, undefined, customSources);
   };
 
   const loadCitations = useCallback(
@@ -253,7 +388,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
         if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
         setCitations((prev) => ({
           ...prev,
-          [paper.id]: { direction, loading: false, error: null, items: Array.isArray(data?.items) ? data.items : [] },
+          [paper.id]: {
+            direction,
+            loading: false,
+            error: null,
+            items: Array.isArray(data?.items) ? data.items : [],
+          },
         }));
       } catch (e) {
         setCitations((prev) => ({
@@ -265,11 +405,22 @@ export const Explorer: React.FC<ExplorerProps> = ({
     []
   );
 
-  const toggleCitations = (paper: Paper) => {
-    const opening = !citationOpen[paper.id];
-    setCitationOpen((prev) => ({ ...prev, [paper.id]: opening }));
-    if (opening && !citations[paper.id]) void loadCitations(paper, 'cited_by');
-  };
+  // Read through a ref so the callback does not have to depend on the citation
+  // maps, which would invalidate every card's `memo` whenever any one row
+  // loaded its citations.
+  const citationsRef = useRef(citations);
+  citationsRef.current = citations;
+  const citationOpenRef = useRef(citationOpen);
+  citationOpenRef.current = citationOpen;
+
+  const toggleCitations = useCallback(
+    (paper: Paper) => {
+      const opening = !citationOpenRef.current[paper.id];
+      setCitationOpen((prev) => ({ ...prev, [paper.id]: opening }));
+      if (opening && !citationsRef.current[paper.id]) void loadCitations(paper, 'cited_by');
+    },
+    [loadCitations]
+  );
 
   const handleLoadMore = useCallback(async () => {
     const search = completedSearch.current;
@@ -307,7 +458,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
       });
     } catch (e) {
       if (requestId !== latestSearchId.current) return;
-      setError((e as Error).message || 'Unable to load more results.');
+      setError((e as Error).message || 'Could not load more results.');
     } finally {
       if (requestId === latestSearchId.current) {
         loadingMoreRequest.current = null;
@@ -316,7 +467,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     }
   }, []);
 
-  const handleDownload = async (paper: Paper) => {
+  const handleDownload = useCallback(async (paper: Paper) => {
     if (!paper.pdf_url) return;
     setDownloadingId(paper.id);
     setDownloadError(null);
@@ -330,22 +481,36 @@ export const Explorer: React.FC<ExplorerProps> = ({
           pdf_url: paper.pdf_url,
           source: paper.source,
           year: paper.year,
-          workspace_id: workspaceId || undefined,
         }),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || (json && json.success === false)) {
-        throw new Error(json?.error || `Gateway returned error code ${res.status}`);
+        setDownloadError({
+          message: json?.error || `The gateway returned status ${res.status}`,
+          paper,
+        });
+        setTimeout(() => setDownloadError(null), 12000);
+        return;
       }
       setDownloadSuccessId(paper.id);
       setTimeout(() => setDownloadSuccessId(null), 3000);
     } catch (err) {
-      setDownloadError(`PDF download failed: ${(err as Error).message}`);
-      setTimeout(() => setDownloadError(null), 6000);
+      setDownloadError({ message: `PDF download failed: ${(err as Error).message}`, paper });
+      setTimeout(() => setDownloadError(null), 12000);
     } finally {
       setDownloadingId(null);
     }
-  };
+  }, []);
+
+  const openFulltextReader = useCallback((paper: Paper) => {
+    setReaderPaper(paper);
+    setReaderOpen(true);
+  }, []);
+
+  const openAgentExport = useCallback((paper: Paper) => {
+    setAgentExportPapers([paper]);
+    setAgentExportModalOpen(true);
+  }, []);
 
   // --- Derived lists -------------------------------------------------------
   const allPapers = useMemo(() => {
@@ -368,10 +533,18 @@ export const Explorer: React.FC<ExplorerProps> = ({
     return counts;
   }, [allPapers]);
 
+  const interestedCount = useMemo(() => {
+    return allPapers.filter((paper) => savedPaperIds.has(paper.id)).length;
+  }, [allPapers, savedPaperIds]);
+
   const displayedPapers = useMemo(() => {
-    const base = sourceFilter === 'all'
-      ? allPapers
-      : allPapers.filter((paper) => getSourceGroup(paper) === sourceFilter);
+    const base =
+      sourceFilter === 'all'
+        ? allPapers
+        : sourceFilter === 'interested'
+        ? allPapers.filter((paper) => savedPaperIds.has(paper.id))
+        : allPapers.filter((paper) => getSourceGroup(paper) === sourceFilter);
+
     if (sortKey === 'relevance') return base;
     return [...base].sort((a, b) => {
       if (sortKey === 'year') return (b.year || 0) - (a.year || 0);
@@ -379,179 +552,499 @@ export const Explorer: React.FC<ExplorerProps> = ({
       if (sortKey === 'pdf') return evaluatePaper(b).pdfScore - evaluatePaper(a).pdfScore;
       return evaluatePaper(b).overall - evaluatePaper(a).overall;
     });
-  }, [sourceFilter, sortKey, allPapers]);
+  }, [sourceFilter, sortKey, allPapers, savedPaperIds]);
 
   const hiddenByOa = (results?.papers || []).filter((paper) => !(paper.open_access || paper.pdf_url)).length;
   const availableTotal = results?.available_total ?? results?.total ?? 0;
-  const canLoadMore = !!results && availableTotal > (completedSearch.current?.offset ?? results.papers.length)
-    && (completedSearch.current?.offset ?? 0) < 10_000;
+  const canLoadMore =
+    !!results &&
+    availableTotal > (completedSearch.current?.offset ?? results.papers.length) &&
+    (completedSearch.current?.offset ?? 0) < 10_000;
+
+  const currentPresetMeta = AVAILABLE_PRESETS.find((p) => p.id === searchScope);
+
+  // Selection over the rows currently shown, so papers can be gathered straight
+  // from the results and exported without saving them first.
+  const visibleIds = useMemo(() => displayedPapers.map((paper) => paper.id), [displayedPapers]);
+  const selection = useSelection(visibleIds);
+  const selectedPapers = useMemo(
+    () => allPapers.filter((paper) => selection.isSelected(paper.id)),
+    [allPapers, selection]
+  );
+
+  const downloadFile = (content: string, extension: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `scholargate_${new Date().toISOString().slice(0, 10)}.${extension}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportSelectedRis = () =>
+    downloadFile(risLibrary(selectedPapers), 'ris', 'application/x-research-info-systems');
+  const exportSelectedBibtex = () =>
+    downloadFile(bibtexLibrary(selectedPapers), 'bib', 'application/x-bibtex');
 
   return (
     <div className="page-container">
-      {/* ---------------- Search ---------------- */}
+      {/* ---------------- Search & Scope Bar ---------------- */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {!hideSearchBar && (
-        <form
-          id="paper-search"
-          className="search-omnibox"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submitSearch();
-          }}
-        >
-          <Search size={18} style={{ color: 'var(--primary-cyan)', marginLeft: 4 }} />
-          <input
-            id="paper-search-input"
-            type="text"
-            className="search-input"
-            placeholder="Search keywords, topics, DOI (10.xxx), or PMID… (⌘K)"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
+          <form
+            id="paper-search"
+            className="search-omnibox"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitSearch();
             }}
-            aria-label="Search query"
-          />
-          <button id="paper-search-submit" type="submit" className="search-submit-btn" disabled={loading || !query.trim()}>
-            {loading ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                <span>Scanning…</span>
-              </>
-            ) : (
-              <>
-                <Sparkles size={14} />
-                <span>Search</span>
-              </>
-            )}
-          </button>
-        </form>
+          >
+            <Search size={18} style={{ color: 'var(--primary-cyan)', marginLeft: 4 }} />
+            <input
+              id="paper-search-input"
+              type="text"
+              className="search-input"
+              placeholder="Search keywords, authors, topics, DOI (10.xxx) or PMID… (⌘K)"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+              }}
+              aria-label="Search query"
+            />
+            <button
+              id="paper-search-submit"
+              type="submit"
+              className="search-submit-btn"
+              disabled={loading || !query.trim()}
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Scanning…</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} />
+                  <span>Search</span>
+                </>
+              )}
+            </button>
+          </form>
         )}
 
-        {/* Modern Minimalist Filter & Scope Bar */}
-        <details ref={searchOptionsRef} id="search-options" className="compact-options">
-          <summary>Advanced filters · {SCOPES.find(scope => scope.id === searchScope)?.label || searchScope} · {yearMin || yearMax ? `${yearMin || '…'}–${yearMax || '…'}` : 'All years'}</summary>
-          <div className="compact-options-body">
-          <section className="discipline-picker" aria-labelledby="discipline-heading">
-            <div>
-              <h2 id="discipline-heading">Choose a discipline</h2>
-              <p>Select a source group, then search. Your keywords stay unchanged.</p>
-            </div>
-            <div className="discipline-grid" role="group" aria-label="Quick discipline selection">
-              {QUICK_DISCIPLINES.map(preset => (
-                <button id={`discipline-${preset.id}`} key={preset.id} type="button"
-                  className={`discipline-card ${searchScope === preset.id ? 'active' : ''}`}
-                  aria-pressed={searchScope === preset.id} title={preset.description}
-                  onClick={() => handleScopeChange(preset.id)}>
-                  <span>{preset.label}</span>
-                  <small>{preset.sources.length} sources {searchScope === preset.id && <Check size={13} aria-hidden="true" />}</small>
-                </button>
-              ))}
-            </div>
-          </section>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>
-                <Layers size={14} style={{ color: 'var(--primary-cyan)' }} />
-                <label htmlFor="search-scope">All disciplines & collections</label>
-              </div>
-              <select
-                id="search-scope"
-                aria-label="Search scope"
-                className="field-input"
-                style={{ width: 'auto', maxWidth: 220, fontSize: 12, padding: '5px 10px' }}
-                value={searchScope}
-                onChange={(e) => handleScopeChange(e.target.value)}
+        {/* Quick Domain Presets & Source Limiter Bar */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            flexWrap: 'wrap',
+            padding: '10px 14px',
+            background: 'var(--cockpit-card)',
+            border: '1px solid var(--cockpit-border)',
+            borderRadius: 'var(--radius-md)',
+          }}
+        >
+          {/* Quick Domain Pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>
+              Discipline:
+            </span>
+            <button
+              type="button"
+              className={`quick-pill ${searchScope === 'default' && customSources.length === 0 ? 'active' : ''}`}
+              onClick={() => handleScopeChange('default')}
+              title="Use the default source selection from Settings"
+            >
+              Default
+            </button>
+            {QUICK_DISCIPLINES.slice(0, 6).map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={`quick-pill ${searchScope === preset.id && customSources.length === 0 ? 'active' : ''}`}
+                onClick={() => handleScopeChange(preset.id)}
+                title={preset.description}
               >
-                {SCOPES.map((scope) => (
-                  <option key={scope.id} value={scope.id}>
-                    {scope.label}
-                  </option>
+                <span>{preset.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Source Limiter Popup Button */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              type="button"
+              className={`action-btn ${customSources.length > 0 ? 'action-btn-primary' : ''}`}
+              onClick={() => setSourceLimiterOpen(true)}
+              title={`Open the limiter to customise the ${AVAILABLE_SOURCE_IDS.size} active sources`}
+              style={{ fontSize: 12, padding: '5px 12px' }}
+            >
+              <Filter size={13} />
+              <span>
+                {customSources.length > 0
+                  ? `Custom (${customSources.length} sources)`
+                  : currentPresetMeta
+                  ? `Sources: ${currentPresetMeta.label}`
+                  : `Limit sources (${AVAILABLE_SOURCE_IDS.size})`}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Modern Minimalist Filter Details Bar */}
+        <details ref={searchOptionsRef} id="search-options" className="compact-options">
+          <summary style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <SlidersHorizontal size={14} style={{ color: 'var(--primary-cyan)' }} />
+            <span>
+              Advanced filters · {currentPresetMeta?.label || 'Default'} ·{' '}
+              {yearMin || yearMax ? `${yearMin || '…'}–${yearMax || '…'}` : 'All years'}
+              {customSources.length > 0 ? ` · ${customSources.length} custom sources` : ''}
+            </span>
+          </summary>
+          <div className="compact-options-body">
+            <section className="discipline-picker" aria-labelledby="discipline-heading">
+              <div>
+                <h2 id="discipline-heading">8 standardised discipline groups & 4 modes</h2>
+                <p>Pick a discipline group to tune the sources. Your keywords are left untouched.</p>
+              </div>
+              <div className="discipline-grid" role="group" aria-label="Discipline selection grid">
+                {QUICK_DISCIPLINES.map((preset) => (
+                  <button
+                    id={`discipline-${preset.id}`}
+                    key={preset.id}
+                    type="button"
+                    className={`discipline-card ${searchScope === preset.id && customSources.length === 0 ? 'active' : ''}`}
+                    aria-pressed={searchScope === preset.id}
+                    title={preset.description}
+                    onClick={() => handleScopeChange(preset.id)}
+                  >
+                    <span>{preset.label}</span>
+                    <small>
+                      {preset.sources.length} sources{' '}
+                      {searchScope === preset.id && customSources.length === 0 && (
+                        <Check size={13} aria-hidden="true" />
+                      )}
+                    </small>
+                  </button>
                 ))}
-              </select>
-
-              <div style={{ width: 1, height: 16, background: 'var(--cockpit-border)', margin: '0 4px' }} />
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>
-                <Calendar size={14} style={{ color: 'var(--primary-cyan)' }} />
-                <span>Year</span>
               </div>
-              <div className="quick-pill-group">
-                <button
-                  type="button"
-                  className={`quick-pill ${!yearMin && !yearMax ? 'active' : ''}`}
-                  onClick={() => { setYearMin(''); setYearMax(''); }}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  className={`quick-pill ${yearMin === String(new Date().getFullYear() - 5) && !yearMax ? 'active' : ''}`}
-                  onClick={() => { setYearMin(String(new Date().getFullYear() - 5)); setYearMax(''); }}
-                >
-                  Past 5 Years
-                </button>
-                <button
-                  type="button"
-                  className={`quick-pill ${yearMin === String(new Date().getFullYear()) && !yearMax ? 'active' : ''}`}
-                  onClick={() => { setYearMin(String(new Date().getFullYear())); setYearMax(''); }}
-                >
-                  This Year
-                </button>
+            </section>
+
+            <section
+              aria-labelledby="mesh-builder-heading"
+              style={{ border: '1px solid var(--cockpit-border)', borderRadius: 10, padding: 14 }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <h2 id="mesh-builder-heading" style={{ margin: 0, fontSize: 14 }}>MeSH & Boolean</h2>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>
+                    Each line is a synonym (OR); groups combine with AND/OR. PubMed uses raw MeSH,
+                    and other sources are translated into their own syntax automatically.
+                  </p>
+                </div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  <input
+                    id="mesh-explode"
+                    type="checkbox"
+                    checked={meshExplode}
+                    onChange={(event) => setMeshExplode(event.target.checked)}
+                  />
+                  Explode the MeSH tree
+                </label>
               </div>
 
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 2 }}>
-                <input
-                  id="search-year-min"
-                  aria-label="From year"
+              <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                {meshGroups.map((group, index) => (
+                  <div key={index} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) 170px auto', gap: 8 }}>
+                    <textarea
+                      id={`mesh-group-${index}`}
+                      aria-label={`Concept group ${index + 1}`}
+                      className="field-input"
+                      rows={2}
+                      placeholder={index === 0 ? 'heart failure\ncardiac failure' : 'drug therapy\ntreatment'}
+                      value={group.terms}
+                      onChange={(event) => setMeshGroups((current) => current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, terms: event.target.value } : item
+                      ))}
+                    />
+                    <select
+                      aria-label={`Search field for group ${index + 1}`}
+                      className="field-input"
+                      value={group.field}
+                      onChange={(event) => setMeshGroups((current) => current.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, field: event.target.value as MeshField } : item
+                      ))}
+                    >
+                      <option value="mh">MeSH Terms</option>
+                      <option value="majr">MeSH Major Topic</option>
+                      <option value="tiab">Title / Abstract</option>
+                      <option value="ti">Title</option>
+                      <option value="all">All Fields</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="action-btn"
+                      aria-label={`Remove group ${index + 1}`}
+                      disabled={meshGroups.length === 1}
+                      onClick={() => setMeshGroups((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+                <button
+                  id="mesh-add-group"
+                  type="button"
+                  className="action-btn"
+                  onClick={() => setMeshGroups((current) => [...current, { terms: '', field: 'tiab' }])}
+                >
+                  Add group
+                </button>
+                <label htmlFor="mesh-operator" style={{ fontSize: 12, color: 'var(--text-muted)' }}>Combine groups</label>
+                <select
+                  id="mesh-operator"
                   className="field-input"
-                  type="number"
-                  min="1000"
-                  max="9999"
-                  placeholder="From"
-                  style={{ width: 68, fontSize: 11.5, padding: '4px 6px' }}
-                  value={yearMin}
-                  onChange={(e) => setYearMin(e.target.value)}
+                  style={{ width: 80 }}
+                  value={meshOperator}
+                  onChange={(event) => setMeshOperator(event.target.value as 'AND' | 'OR')}
+                >
+                  <option value="AND">AND</option>
+                  <option value="OR">OR</option>
+                </select>
+                <input
+                  id="mesh-exclusions"
+                  className="field-input"
+                  style={{ flex: 1, minWidth: 190 }}
+                  placeholder="Exclusions (one per line, or separated by |)"
+                  value={meshExclusions}
+                  onChange={(event) => setMeshExclusions(event.target.value)}
                 />
-                <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>-</span>
+              </div>
+
+              {generatedMeshQuery && (
+                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                  <code
+                    id="mesh-query-preview"
+                    style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', padding: 10, borderRadius: 8, background: 'var(--cockpit-card)' }}
+                  >
+                    {generatedMeshQuery}
+                  </code>
+                  <div aria-label="Syntax compatibility per source" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11 }}>
+                    {([
+                      ['pubmed_mesh', 'Raw MeSH'],
+                      ['europe_pmc', 'Europe PMC translation'],
+                      ['arxiv', 'arXiv translation'],
+                      ['native_boolean', 'Raw Boolean'],
+                      ['plain_keywords', 'Safe keywords'],
+                    ] as const).map(([mode, label]) => {
+                      const matching = queryPreview.filter((item) => item.mode === mode);
+                      return matching.length ? (
+                        <span key={mode} className="quick-pill" title={matching.map((item) => item.id).join(', ')}>
+                          {label}: {matching.length}
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                  <button
+                    id="mesh-apply-search"
+                    type="button"
+                    className="search-submit-btn"
+                    disabled={loading}
+                    onClick={applyMeshSearch}
+                    style={{ justifySelf: 'start' }}
+                  >
+                    <Search size={14} /> Apply & search
+                  </button>
+                </div>
+              )}
+            </section>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    color: 'var(--text-muted)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  <Layers size={14} style={{ color: 'var(--primary-cyan)' }} />
+                  <label htmlFor="search-scope">All source groups</label>
+                </div>
+                <select
+                  id="search-scope"
+                  aria-label="Search scope"
+                  className="field-input"
+                  style={{ width: 'auto', maxWidth: 220, fontSize: 12, padding: '5px 10px' }}
+                  value={searchScope}
+                  onChange={(e) => handleScopeChange(e.target.value)}
+                >
+                  {SCOPES.map((scope) => (
+                    <option key={scope.id} value={scope.id}>
+                      {scope.label}
+                    </option>
+                  ))}
+                </select>
+
+                <div style={{ width: 1, height: 16, background: 'var(--cockpit-border)', margin: '0 4px' }} />
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    color: 'var(--text-muted)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  <Calendar size={14} style={{ color: 'var(--primary-cyan)' }} />
+                  <span>Year</span>
+                </div>
+                <div className="quick-pill-group">
+                  <button
+                    type="button"
+                    className={`quick-pill ${!yearMin && !yearMax ? 'active' : ''}`}
+                    onClick={() => {
+                      setYearMin('');
+                      setYearMax('');
+                    }}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`quick-pill ${
+                      yearMin === String(new Date().getFullYear() - 5) && !yearMax ? 'active' : ''
+                    }`}
+                    onClick={() => {
+                      setYearMin(String(new Date().getFullYear() - 5));
+                      setYearMax('');
+                    }}
+                  >
+                    Last 5 years
+                  </button>
+                  <button
+                    type="button"
+                    className={`quick-pill ${
+                      yearMin === String(new Date().getFullYear() - 3) && !yearMax ? 'active' : ''
+                    }`}
+                    onClick={() => {
+                      setYearMin(String(new Date().getFullYear() - 3));
+                      setYearMax('');
+                    }}
+                  >
+                    Last 3 years
+                  </button>
+                  <button
+                    type="button"
+                    className={`quick-pill ${
+                      yearMin === String(new Date().getFullYear()) && !yearMax ? 'active' : ''
+                    }`}
+                    onClick={() => {
+                      setYearMin(String(new Date().getFullYear()));
+                      setYearMax('');
+                    }}
+                  >
+                    This year
+                  </button>
+                </div>
+
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 2 }}>
+                  <input
+                    id="search-year-min"
+                    aria-label="From year"
+                    className="field-input"
+                    type="number"
+                    min="1000"
+                    max="9999"
+                    placeholder="From"
+                    style={{ width: 68, fontSize: 11.5, padding: '4px 6px' }}
+                    value={yearMin}
+                    onChange={(e) => setYearMin(e.target.value)}
+                  />
+                  <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>-</span>
+                  <input
+                    id="search-year-max"
+                    aria-label="To year"
+                    className="field-input"
+                    type="number"
+                    min="1000"
+                    max="9999"
+                    placeholder="To"
+                    style={{ width: 68, fontSize: 11.5, padding: '4px 6px' }}
+                    value={yearMax}
+                    onChange={(e) => setYearMax(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Result limit:</span>
                 <input
-                  id="search-year-max"
-                  aria-label="To year"
+                  id="search-limit"
+                  aria-label="Result limit"
                   className="field-input"
                   type="number"
-                  min="1000"
-                  max="9999"
-                  placeholder="To"
-                  style={{ width: 68, fontSize: 11.5, padding: '4px 6px' }}
-                  value={yearMax}
-                  onChange={(e) => setYearMax(e.target.value)}
+                  min="1"
+                  max="50"
+                  placeholder="20"
+                  style={{ width: 56, fontSize: 11.5, padding: '4px 6px', textAlign: 'center' }}
+                  value={resultLimit}
+                  onChange={(e) => setResultLimit(e.target.value)}
                 />
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Limit:</span>
-              <input
-                id="search-limit"
-                aria-label="Result limit"
-                className="field-input"
-                type="number"
-                min="1"
-                max="50"
-                placeholder="20"
-                style={{ width: 56, fontSize: 11.5, padding: '4px 6px', textAlign: 'center' }}
-                value={resultLimit}
-                onChange={(e) => setResultLimit(e.target.value)}
-              />
+            <div className="search-options-footer">
+              <p>
+                {query.trim()
+                  ? 'Filters apply as soon as you press Search.'
+                  : 'Type a keyword in the search bar above to begin.'}
+              </p>
+              <button
+                id="search-reset-options"
+                type="button"
+                className="action-btn"
+                onClick={() => {
+                  setSearchScope('default');
+                  setCustomSources([]);
+                  setYearMin('');
+                  setYearMax('');
+                  setResultLimit('');
+                }}
+              >
+                Reset filters
+              </button>
+              <button
+                id="search-apply-options"
+                type="button"
+                className="search-submit-btn"
+                disabled={loading || !query.trim()}
+                onClick={submitSearch}
+              >
+                <Search size={14} /> {loading ? 'Searching…' : 'Search with filters'}
+              </button>
             </div>
-          </div>
-
-          <div className="search-options-footer">
-            <p>{query.trim() ? 'Filters apply when you search.' : 'Enter keywords in the search bar above to begin.'}</p>
-            <button id="search-reset-options" type="button" className="action-btn"
-              onClick={() => { setSearchScope('default'); setYearMin(''); setYearMax(''); setResultLimit(''); }}>Reset filters</button>
-            <button id="search-apply-options" type="button" className="search-submit-btn" disabled={loading || !query.trim()}
-              onClick={submitSearch}><Search size={14} /> {loading ? 'Searching…' : 'Search with filters'}</button>
-          </div>
           </div>
         </details>
       </div>
@@ -566,7 +1059,21 @@ export const Explorer: React.FC<ExplorerProps> = ({
       {downloadError && (
         <div className="alert alert-warning">
           <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-          <div>{downloadError}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span>{downloadError.message}</span>
+            {downloadError.paper && originalPaperUrl(downloadError.paper) && (
+              <a
+                className="action-btn"
+                href={originalPaperUrl(downloadError.paper)!}
+                target="_blank"
+                rel="noreferrer"
+                style={{ textDecoration: 'none' }}
+              >
+                <ExternalLink size={13} />
+                <span>Open the article page</span>
+              </a>
+            )}
+          </div>
         </div>
       )}
 
@@ -583,32 +1090,49 @@ export const Explorer: React.FC<ExplorerProps> = ({
             paddingBottom: 12,
           }}
         >
-          <div className="segmented source-group-filter" role="tablist" aria-label="Filter by source group">
-            {([
-              ['all', 'All', allPapers.length],
-              ...Object.entries(SOURCE_GROUPS).map(([id, meta]) => [
-                id,
-                meta.shortLabel,
-                sourceCounts[id as SourceGroup],
-              ]),
-            ] as [SourceFilter, string, number][])
-              // An empty group cannot be selected usefully, so it only adds noise —
-              // unless it is the filter the user is currently on.
-              .filter(([id, , count]) => id === 'all' || count > 0 || sourceFilter === id)
-              .map(([id, label, count]) => (
+          <div className="segmented source-group-filter" role="tablist" aria-label="Filter by source group or interest list">
+            <button
+              id="source-group-all"
+              type="button"
+              role="tab"
+              aria-selected={sourceFilter === 'all'}
+              className={`segmented-item ${sourceFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setSourceFilter('all')}
+            >
+              <span>All</span>
+              <span className="segmented-count">{allPapers.length}</span>
+            </button>
+
+            {interestedCount > 0 && (
               <button
-                key={id}
-                id={`source-group-${id}`}
+                id="source-group-interested"
                 type="button"
                 role="tab"
-                aria-selected={sourceFilter === id}
-                className={`segmented-item ${sourceFilter === id ? 'active' : ''}`}
-                onClick={() => setSourceFilter(id)}
+                aria-selected={sourceFilter === 'interested'}
+                className={`segmented-item ${sourceFilter === 'interested' ? 'active' : ''}`}
+                onClick={() => setSourceFilter('interested')}
               >
-                <span>{label}</span>
-                <span className="segmented-count">{count}</span>
+                <span>Interest</span>
+                <span className="segmented-count">{interestedCount}</span>
               </button>
-            ))}
+            )}
+
+            {Object.entries(SOURCE_GROUPS)
+              .filter(([id]) => sourceCounts[id as SourceGroup] > 0 || sourceFilter === id)
+              .map(([id, meta]) => (
+                <button
+                  key={id}
+                  id={`source-group-${id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={sourceFilter === id}
+                  className={`segmented-item ${sourceFilter === id ? 'active' : ''}`}
+                  onClick={() => setSourceFilter(id as SourceGroup)}
+                >
+                  <span>{meta.shortLabel}</span>
+                  <span className="segmented-count">{sourceCounts[id as SourceGroup]}</span>
+                </button>
+              ))}
           </div>
 
           <div
@@ -629,7 +1153,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                 onChange={(e) => handleOaToggle(e.target.checked)}
                 style={{ accentColor: 'var(--primary-cyan)' }}
               />
-              <span>Open Access / PDF only</span>
+              <span>Open access / has PDF</span>
               {oaOnly && hiddenByOa > 0 && (
                 <span style={{ color: 'var(--text-dim)' }}>(hidden {hiddenByOa})</span>
               )}
@@ -643,11 +1167,11 @@ export const Explorer: React.FC<ExplorerProps> = ({
                 onChange={(e) => setRecommendedPdfOnly(e.target.checked)}
                 style={{ accentColor: 'var(--primary-cyan)' }}
               />
-              <span>Recommended PDF only</span>
+              <span>Prefer PDF</span>
             </label>
 
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>Type</span>
+              <span>Kind</span>
               <select
                 id="filter-kind"
                 className="field-input"
@@ -655,9 +1179,11 @@ export const Explorer: React.FC<ExplorerProps> = ({
                 value={kindFilter}
                 onChange={(e) => setKindFilter(e.target.value as 'all' | PaperKind)}
               >
-                <option value="all">All Types</option>
+                <option value="all">All kinds</option>
                 {(Object.keys(KIND_META) as PaperKind[]).map((kind) => (
-                  <option key={kind} value={kind}>{KIND_META[kind].label}</option>
+                  <option key={kind} value={kind}>
+                    {KIND_META[kind].label}
+                  </option>
                 ))}
               </select>
             </label>
@@ -672,10 +1198,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
                 onChange={(e) => setSortKey(e.target.value as SortKey)}
               >
                 <option value="relevance">Relevance (RRF)</option>
-                <option value="evaluation">Screening Score</option>
-                <option value="pdf">PDF Availability</option>
-                <option value="year">Publication Year</option>
-                <option value="citations">Citations</option>
+                <option value="evaluation">Screening score</option>
+                <option value="pdf">PDF availability</option>
+                <option value="year">Most recent publication year</option>
+                <option value="citations">Citation count</option>
               </select>
             </label>
 
@@ -703,11 +1229,89 @@ export const Explorer: React.FC<ExplorerProps> = ({
         </div>
       )}
 
+      {/* -------- Selection & reference export -------- */}
+      {results && !loading && displayedPapers.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            padding: '8px 12px',
+            border: '1px solid var(--cockpit-border)',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--cockpit-card)',
+            fontSize: 12,
+          }}
+        >
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input
+              id="select-all-results"
+              type="checkbox"
+              checked={selection.allVisibleSelected}
+              ref={(node) => {
+                if (node) {
+                  node.indeterminate =
+                    selection.visibleSelectedCount > 0 && !selection.allVisibleSelected;
+                }
+              }}
+              onChange={selection.toggleAllVisible}
+              aria-label="Select all shown results"
+              style={{ accentColor: 'var(--primary-cyan)' }}
+            />
+            <span>Select all ({displayedPapers.length})</span>
+          </label>
+
+          {selection.count > 0 ? (
+            <>
+              <span style={{ color: 'var(--primary-cyan)', fontWeight: 600 }}>
+                {selection.count} selected
+              </span>
+              <button
+                id="export-selected-ris"
+                type="button"
+                className="action-btn"
+                onClick={exportSelectedRis}
+                title="RIS is the shared import format of Zotero, EndNote and Mendeley"
+                style={{ padding: '4px 10px' }}
+              >
+                Export .RIS — Zotero / EndNote
+              </button>
+              <button
+                id="export-selected-bibtex"
+                type="button"
+                className="action-btn"
+                onClick={exportSelectedBibtex}
+                style={{ padding: '4px 10px' }}
+              >
+                Export BibTeX
+              </button>
+              <button
+                type="button"
+                className="action-btn"
+                onClick={() => {
+                  setAgentExportPapers(selectedPapers);
+                  setAgentExportModalOpen(true);
+                }}
+                style={{ padding: '4px 10px' }}
+              >
+                <Bot size={13} /> Send to AI agent
+              </button>
+              <button type="button" className="action-btn" onClick={selection.clear} style={{ padding: '4px 10px' }}>
+                Clear
+              </button>
+            </>
+          ) : (
+            <span style={{ color: 'var(--text-dim)' }}>
+              Tick results to export them as references, without saving them first.
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ---------------- Source health ---------------- */}
       {results?.sources && results.sources.length > 0 && !loading && (() => {
         const queried = results.sources.filter((s) => s.queried);
-        // A source still waiting for an API key or sign-in has not failed; it was
-        // never set up. Counting it as unresponsive made every search look broken.
         const needsSetup = queried.filter((s) => !s.ok && s.needs_setup);
         const cooling = queried.filter((s) => !s.ok && s.cooling_down);
         const failed = queried.filter((s) => !s.ok && !s.needs_setup && !s.cooling_down);
@@ -794,8 +1398,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
         );
       })()}
 
-      {/* ---------------- Results ---------------- */}
-      <div>
+      {/* ---------------- Results List ---------------- */}
+      <div className="paper-list">
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <SearchScanner query={query || 'All topics'} scope={searchScope} />
@@ -815,9 +1419,9 @@ export const Explorer: React.FC<ExplorerProps> = ({
             <div className="empty-state-icon">
               <Compass size={24} />
             </div>
-            <div className="empty-state-title">Find your next paper</div>
+            <div className="empty-state-title">Explore academic research papers</div>
             <div className="empty-state-text">
-              Enter keywords, a title or DOI above. Open Advanced filters to choose a discipline, then Search.
+              Type a keyword, paper title or DOI above. You can pick a discipline quickly, or open <b>Limit sources</b> to narrow the search.
             </div>
           </div>
         )}
@@ -827,327 +1431,46 @@ export const Explorer: React.FC<ExplorerProps> = ({
             <div className="empty-state-icon">
               <Search size={24} />
             </div>
-            <div className="empty-state-title">No papers match current filters</div>
+            <div className="empty-state-title">No papers match the current filters</div>
             <div className="empty-state-text">
               {oaOnly
-                ? 'Try unchecking "Open Access / PDF only", switching to another category tab, or broadening your query.'
-                : 'Try switching to the "All" tab, changing search scope, or using broader keywords.'}
+                ? 'Try clearing "Open access / has PDF", switching discipline, or broadening your keywords.'
+                : 'Try the "All" tab, a different discipline group, or broader keywords.'}
             </div>
           </div>
         )}
 
         {!loading &&
-          displayedPapers.map((paper) => {
-            const isExpanded = !!expandedAbstracts[paper.id];
-            const isSaved = savedPaperIds.has(paper.id);
-            const isCopied = copiedId === `${paper.id}:apa`;
-            const isCopiedBib = copiedId === `${paper.id}:bibtex`;
-            const isDownloading = downloadingId === paper.id;
-            const isDownloaded = downloadSuccessId === paper.id;
-            const isVn = isVietnamPaper(paper);
-            const kind = getPaperKind(paper);
-            const sourceGroup = getSourceGroup(paper);
-            const groupMeta = SOURCE_GROUPS[sourceGroup];
-            const evaluation = evaluatePaper(paper);
-            const abstract = paper.abstract || '';
-            const needsClamp = abstract.length > ABSTRACT_CLAMP;
-
-            return (
-              <article key={paper.id} className={`paper-card compact-paper ${selectedId === paper.id ? 'selected' : ''}`}>
-                <div className="paper-header">
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="paper-badges">
-                      <span className="badge badge-source badge-essential">{paper.source}</span>
-                      {kind !== 'article' && KIND_META[kind].badge && (
-                        <span className={`badge badge-essential ${KIND_META[kind].badge}`}>{KIND_META[kind].label}</span>
-                      )}
-                      <span className="badge badge-group" title={groupMeta.label}>{groupMeta.shortLabel}</span>
-                      {isVn && <span className="badge badge-vjol badge-essential">🇻🇳 VIETNAM</span>}
-                      {paper.open_access && <span className="badge badge-oa badge-essential">OPEN ACCESS</span>}
-                      {evaluation.recommendedPdf && (
-                        <span className="badge badge-pdf-recommended"><FileCheck2 size={11} /> RECOMMENDED PDF {evaluation.pdfScore}</span>
-                      )}
-                      <span title="Heuristic screening aid for reading priority, not a study quality score" className={`badge evidence-${evaluation.label === 'Recommended' ? 'strong' : evaluation.label === 'Consider' ? 'fair' : 'review'}`}>
-                        <Award size={11} /> SCREENING {evaluation.overall}/100
-                      </span>
-                      {paper.quartile && <span className="badge badge-q1">{paper.quartile}</span>}
-                      {paper.score !== undefined && (
-                        <span
-                          className="badge"
-                          title="Multi-source fused score (Reciprocal Rank Fusion)"
-                          style={{
-                            background: '#f1f5f9',
-                            color: 'var(--text-muted)',
-                            border: '1px solid var(--cockpit-border)',
-                          }}
-                        >
-                          RRF {paper.score.toFixed(3)}
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="paper-title">
-                      <button className="paper-title-button" aria-expanded={selectedId === paper.id}
-                        onClick={(event) => { detailTrigger.current = event.currentTarget; setSelectedId(paper.id); }}>
-                        {paper.title}
-                      </button>
-                    </h3>
-                  </div>
-
-                  <button
-                    className={`action-btn ${isSaved ? 'action-btn-primary' : ''}`}
-                    onClick={() => onSavePaper(paper)}
-                    title={isSaved ? 'Remove from workspace' : 'Save to workspace'}
-                    style={{ flexShrink: 0 }}
-                  >
-                    <Bookmark size={14} fill={isSaved ? '#ffffff' : 'none'} />
-                    <span>{isSaved ? 'Saved' : 'Save'}</span>
-                  </button>
-                  {(paper.source_url || paper.doi) && <a className="action-btn"
-                    href={paper.source_url || `https://doi.org/${paper.doi}`} target="_blank" rel="noreferrer">Open</a>}
-                </div>
-
-                <div className="paper-meta">
-                  <span>
-                    {paper.authors.slice(0, 3).join(', ')}
-                    {paper.authors.length > 3 ? ' et al.' : ''}
-                  </span>
-                  {paper.year && <span>• {paper.year}</span>}
-                  {paper.venue && (
-                    <span>
-                      • <i>{paper.venue}</i>
-                    </span>
-                  )}
-                  {selectedId === paper.id && paper.citations != null && (
-                    <span>
-                      • Citations: <b>{paper.citations}</b>
-                    </span>
-                  )}
-                  {selectedId === paper.id && paper.doi && (
-                    <span>
-                      • DOI:{' '}
-                      <a
-                        href={`https://doi.org/${paper.doi}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: 'var(--primary-cyan)', textDecoration: 'none' }}
-                      >
-                        {paper.doi}
-                      </a>
-                    </span>
-                  )}
-                </div>
-
-                {selectedId === paper.id && <aside ref={detailRef} tabIndex={-1} className="paper-detail-panel"
-                  aria-label={`Details: ${paper.title}`} onKeyDown={(event) => { if (event.key === 'Escape') closeDetails(); }}>
-                  <div className="paper-detail-heading">
-                    <h2>{paper.title}</h2>
-                    <button className="action-btn" aria-label="Close paper details" onClick={closeDetails}><X size={16} /></button>
-                  </div>
-                  <p className="paper-meta">{[paper.authors.join(', '), paper.year, paper.venue, paper.source].filter(Boolean).join(' · ')}</p>
-                {abstract && (
-                  <div>
-                    <div className="paper-abstract">
-                      {isExpanded || !needsClamp
-                        ? abstract
-                        : `${abstract.slice(0, ABSTRACT_CLAMP).trimEnd()}…`}
-                    </div>
-                    {needsClamp && (
-                      <button
-                        onClick={() => toggleAbstract(paper.id)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--primary-cyan)',
-                          fontSize: 12,
-                          fontFamily: 'inherit',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          marginBottom: 12,
-                          padding: 0,
-                        }}
-                      >
-                        {isExpanded ? (
-                          <>
-                            <span>Collapse</span>
-                            <ChevronUp size={14} />
-                          </>
-                        ) : (
-                          <>
-                            <span>Read abstract</span>
-                            <ChevronDown size={14} />
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                <details className="evidence-details">
-                  <summary>Transparent Screening Metrics</summary>
-                  <div className="evidence-score-grid">
-                    <span>Relevance <b>{evaluation.relevance}</b></span>
-                    <span>Metadata <b>{evaluation.metadata}</b></span>
-                    <span>Recency <b>{evaluation.recency}</b></span>
-                    <span>Citations <b>{evaluation.citation}</b></span>
-                    <span>Access <b>{evaluation.access}</b></span>
-                  </div>
-                  <p>Heuristic score = 40% RRF rank + 40% metadata completeness + 20% access availability. Recency and citations are shown for reference without adding bias. This does not evaluate study methodology, certainty of evidence, or risk of bias; applied uniformly across all disciplines.</p>
-                </details>
-
-                <div className="paper-actions">
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      className="action-btn"
-                      onClick={() => copyCitation(paper, 'apa')}
-                      title="Copy APA Citation"
-                    >
-                      {isCopied ? <Check size={14} color="var(--status-emerald)" /> : <Copy size={14} />}
-                      <span>{isCopied ? 'Copied' : 'Copy APA'}</span>
-                    </button>
-
-                    <button
-                      className="action-btn"
-                      onClick={() => copyCitation(paper, 'bibtex')}
-                      title="Copy BibTeX Citation"
-                    >
-                      {isCopiedBib ? <Check size={14} color="var(--status-emerald)" /> : <Copy size={14} />}
-                      <span>{isCopiedBib ? 'Copied' : 'Copy BibTeX'}</span>
-                    </button>
-
-                    {(paper.source_url || paper.doi) && (
-                      <a
-                        className="action-btn"
-                        href={paper.source_url || `https://doi.org/${paper.doi}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={`Open original record on ${paper.source}`}
-                        style={{ textDecoration: 'none' }}
-                      >
-                        <ExternalLink size={14} />
-                        <span>View at Source</span>
-                      </a>
-                    )}
-
-                    <button
-                      className="action-btn"
-                      onClick={() => toggleCitations(paper)}
-                      title="View citations, references, and related papers"
-                      aria-expanded={!!citationOpen[paper.id]}
-                    >
-                      <GitBranch size={14} />
-                      <span>{citationOpen[paper.id] ? 'Hide Citations' : 'Citations & Related'}</span>
-                    </button>
-                  </div>
-
-                  {paper.pdf_url && (
-                    <button
-                      className="action-btn action-btn-primary"
-                      onClick={() => handleDownload(paper)}
-                      disabled={isDownloading || isDownloaded}
-                    >
-                      {isDownloading ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : isDownloaded ? (
-                        <Check size={14} />
-                      ) : (
-                        <Download size={14} />
-                      )}
-                      <span>
-                        {isDownloaded
-                          ? 'Downloaded'
-                          : isDownloading
-                          ? 'Downloading PDF…'
-                          : 'Download Full PDF'}
-                      </span>
-                    </button>
-                  )}
-                </div>
-
-                {citationOpen[paper.id] && (
-                  <div style={{ marginTop: 12, borderTop: '1px solid var(--cockpit-border)', paddingTop: 10 }}>
-                    <div className="segmented" role="tablist" style={{ alignSelf: 'flex-start', marginBottom: 8 }}>
-                      {([
-                        ['cited_by', 'Cited By'],
-                        ['references', 'References'],
-                        ['related', 'Related'],
-                      ] as [CitationDirection, string][]).map(([id, label]) => (
-                        <button
-                          key={id}
-                          type="button"
-                          role="tab"
-                          aria-selected={citations[paper.id]?.direction === id}
-                          className={`segmented-item ${citations[paper.id]?.direction === id ? 'active' : ''}`}
-                          onClick={() => void loadCitations(paper, id)}
-                          style={{ fontSize: 11 }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {citations[paper.id]?.loading && (
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading citation network from OpenAlex…</div>
-                    )}
-                    {citations[paper.id]?.error && (
-                      <div className="alert alert-warning" style={{ margin: 0 }}>{citations[paper.id]?.error}</div>
-                    )}
-                    {!citations[paper.id]?.loading &&
-                      !citations[paper.id]?.error &&
-                      (citations[paper.id]?.items.length ?? 0) === 0 && (
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                          No citation graph records found for this direction (requires DOI, PMID, or OpenAlex ID).
-                        </div>
-                      )}
-
-                    {(citations[paper.id]?.items ?? []).map((item) => (
-                      <div
-                        key={item.id}
-                        style={{
-                          display: 'flex',
-                          gap: 10,
-                          alignItems: 'flex-start',
-                          padding: '8px 0',
-                          borderBottom: '1px solid var(--cockpit-border)',
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>{item.title}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            {[item.authors.slice(0, 3).join(', '), item.year, item.source].filter(Boolean).join(' • ')}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                          {(item.source_url || item.doi) && (
-                            <a
-                              className="action-btn"
-                              href={item.source_url || `https://doi.org/${item.doi}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ padding: '3px 8px', fontSize: 11, textDecoration: 'none' }}
-                            >
-                              Open
-                            </a>
-                          )}
-                          <button
-                            className={`action-btn ${savedPaperIds.has(item.id) ? 'action-btn-primary' : ''}`}
-                            onClick={() => onSavePaper(item)}
-                            title={savedPaperIds.has(item.id) ? 'Remove from workspace' : 'Save to workspace'}
-                            style={{ padding: '3px 8px', fontSize: 11 }}
-                          >
-                            <Bookmark size={12} fill={savedPaperIds.has(item.id) ? '#ffffff' : 'none'} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                </aside>}
-              </article>
-            );
-          })}
+          displayedPapers.map((paper) => (
+            <PaperCard
+              key={paper.id}
+              paper={paper}
+              isExpanded={!!expandedAbstracts[paper.id]}
+              isSaved={savedPaperIds.has(paper.id)}
+              isCopied={copiedId === `${paper.id}:apa`}
+              isCopiedBib={copiedId === `${paper.id}:bibtex`}
+              isDownloading={downloadingId === paper.id}
+              isDownloaded={downloadSuccessId === paper.id}
+              isSelected={selectedId === paper.id}
+              isCitationOpen={!!citationOpen[paper.id]}
+              isChecked={selection.isSelected(paper.id)}
+              onToggleChecked={selection.toggle}
+              citationState={citations[paper.id]}
+              savedPaperIds={savedPaperIds}
+              detailRef={detailRef}
+              detailTrigger={detailTrigger}
+              onSelect={setSelectedId}
+              onCloseDetails={closeDetails}
+              onToggleAbstract={toggleAbstract}
+              onSavePaper={onSavePaper}
+              onCopyCitation={copyCitation}
+              onToggleCitations={toggleCitations}
+              onLoadCitations={loadCitations}
+              onDownload={handleDownload}
+              onOpenFulltext={openFulltextReader}
+              onOpenAgentExport={openAgentExport}
+            />
+          ))}
       </div>
 
       {/* ------- Secondary analysis, below the results it describes ------- */}
@@ -1157,6 +1480,35 @@ export const Explorer: React.FC<ExplorerProps> = ({
           <ResearchGapPanel query={query} papers={results.papers} />
         </>
       )}
+
+      {/* ---------------- Modals & Drawers ---------------- */}
+      <SourceLimiterModal
+        isOpen={sourceLimiterOpen}
+        onClose={() => setSourceLimiterOpen(false)}
+        activeScope={searchScope}
+        selectedSources={customSources}
+        onApplySources={handleApplyCustomSources}
+      />
+
+      <FulltextViewerModal
+        isOpen={readerOpen}
+        onClose={() => setReaderOpen(false)}
+        paper={readerPaper}
+        isSaved={readerPaper ? savedPaperIds.has(readerPaper.id) : false}
+        isFavorite={readerPaper ? savedPaperIds.has(readerPaper.id) : false}
+        onSavePaper={onSavePaper}
+        onToggleFavorite={onSavePaper}
+        onDownloadPdf={handleDownload}
+        isDownloadingPdf={readerPaper ? downloadingId === readerPaper.id : false}
+        isDownloadedPdf={readerPaper ? downloadSuccessId === readerPaper.id : false}
+      />
+
+      <AiAgentExportModal
+        isOpen={agentExportModalOpen}
+        onClose={() => setAgentExportModalOpen(false)}
+        papers={agentExportPapers}
+        workspaceName="ScholarGate Discovery"
+      />
     </div>
   );
 };

@@ -17,10 +17,15 @@ pub async fn search_inspire_hep(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("inspire_hep: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "inspire_hep: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("inspire_hep: HTTP {}", res.status()));
@@ -147,10 +152,15 @@ pub async fn search_datacite(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("datacite: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "datacite: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("datacite: HTTP {}", res.status()));
@@ -244,10 +254,15 @@ pub async fn search_econbiz(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("econbiz: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "econbiz: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("econbiz: HTTP {}", res.status()));
@@ -270,7 +285,10 @@ pub async fn search_econbiz(
                 break;
             }
 
-            let title = hit.get("title").and_then(|t| t.as_str()).unwrap_or("(untitled)");
+            let title = hit
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("(untitled)");
             let authors = hit
                 .get("creator")
                 .and_then(|c| c.as_array())
@@ -332,10 +350,15 @@ pub async fn search_eric(
     let res = client
         .get(&url)
         .header("Accept", "application/json")
-        .header("User-Agent", "ScholarGateway-Desktop/1.0")
+        .header("User-Agent", "ScholarGate-Desktop/1.0")
         .send()
         .await
-        .map_err(|e| format!("eric: request failed — {}", crate::sources::transport_reason(&e)))?;
+        .map_err(|e| {
+            format!(
+                "eric: request failed — {}",
+                crate::sources::transport_reason(&e)
+            )
+        })?;
 
     if !res.status().is_success() {
         return Err(format!("eric: HTTP {}", res.status()));
@@ -359,7 +382,10 @@ pub async fn search_eric(
             }
 
             let eric_id = doc.get("id").and_then(|i| i.as_str()).unwrap_or("");
-            let title = doc.get("title").and_then(|t| t.as_str()).unwrap_or("(untitled)");
+            let title = doc
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("(untitled)");
 
             let authors = doc
                 .get("author")
@@ -371,11 +397,16 @@ pub async fn search_eric(
                 })
                 .unwrap_or_default();
 
-            let year = doc
-                .get("publicationdateyear")
-                .and_then(|y| y.as_str().and_then(|s| s.parse::<u32>().ok()).or_else(|| y.as_u64().map(|n| n as u32)));
+            let year = doc.get("publicationdateyear").and_then(|y| {
+                y.as_str()
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .or_else(|| y.as_u64().map(|n| n as u32))
+            });
 
-            let summary = doc.get("description").and_then(|d| d.as_str()).map(clean_html_text);
+            let summary = doc
+                .get("description")
+                .and_then(|d| d.as_str())
+                .map(clean_html_text);
             let source_url = format!("https://eric.ed.gov/?id={}", eric_id);
 
             papers.push(Paper {

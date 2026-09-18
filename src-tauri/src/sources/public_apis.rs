@@ -7,7 +7,8 @@ use serde_json::Value;
 fn year_from(value: Option<&str>) -> Option<u32> {
     let text = value?;
     let start = text.find(|c: char| c.is_ascii_digit())?;
-    text.get(start..start + 4).and_then(|year| year.parse::<u32>().ok())
+    text.get(start..start + 4)
+        .and_then(|year| year.parse::<u32>().ok())
 }
 
 fn json_field<'a>(item: &'a Value, key: &str) -> Option<&'a Value> {
@@ -29,7 +30,11 @@ pub async fn search_cinii(
     let mut papers = Vec::new();
     if let Some(items) = json.get("items").and_then(Value::as_array) {
         for item in items.iter().take(limit) {
-            let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = item
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
             let authors = item
@@ -50,7 +55,10 @@ pub async fn search_cinii(
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            let link = item.get("link").and_then(|l| l.get("@id")).and_then(Value::as_str);
+            let link = item
+                .get("link")
+                .and_then(|l| l.get("@id"))
+                .and_then(Value::as_str);
             let doi = item
                 .get("rdfs:seeAlso")
                 .and_then(|l| l.get("@id"))
@@ -68,10 +76,15 @@ pub async fn search_cinii(
                 title: clean_html_text(title),
                 authors,
                 year: year_from(item.get("prism:publicationDate").and_then(Value::as_str)),
-                venue: item.get("prism:publicationName").and_then(Value::as_str).map(str::to_string),
+                venue: item
+                    .get("prism:publicationName")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 abstract_text: None,
                 doi,
-                source_url: link.or(item.get("@id").and_then(Value::as_str)).map(str::to_string),
+                source_url: link
+                    .or(item.get("@id").and_then(Value::as_str))
+                    .map(str::to_string),
                 pdf_url: None,
                 citations: None,
                 quartile: None,
@@ -103,7 +116,11 @@ pub async fn search_dryad(
         .and_then(Value::as_array)
     {
         for item in items.iter().take(limit) {
-            let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = item
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
             let authors = item
@@ -112,8 +129,14 @@ pub async fn search_dryad(
                 .map(|list| {
                     list.iter()
                         .filter_map(|author| {
-                            let given = author.get("givenName").and_then(Value::as_str).unwrap_or("");
-                            let family = author.get("familyName").and_then(Value::as_str).unwrap_or("");
+                            let given = author
+                                .get("givenName")
+                                .and_then(Value::as_str)
+                                .unwrap_or("");
+                            let family = author
+                                .get("familyName")
+                                .and_then(Value::as_str)
+                                .unwrap_or("");
                             let name = format!("{} {}", given, family).trim().to_string();
                             (!name.is_empty()).then_some(name)
                         })
@@ -125,15 +148,26 @@ pub async fn search_dryad(
                 .get("identifier")
                 .and_then(Value::as_str)
                 .map(|id| id.trim_start_matches("doi:").to_string());
-            let id = item.get("id").and_then(Value::as_u64).map(|id| id.to_string()).unwrap_or_else(|| title.to_string());
+            let id = item
+                .get("id")
+                .and_then(Value::as_u64)
+                .map(|id| id.to_string())
+                .unwrap_or_else(|| title.to_string());
             papers.push(Paper {
                 id: format!("dryad:{id}"),
                 title: title.to_string(),
                 authors,
-                year: year_from(item.get("publicationDate").and_then(Value::as_str))
-                    .or_else(|| year_from(item.get("lastModificationDate").and_then(Value::as_str))),
-                venue: item.get("fieldOfScience").and_then(Value::as_str).map(str::to_string),
-                abstract_text: item.get("abstract").and_then(Value::as_str).map(str::to_string),
+                year: year_from(item.get("publicationDate").and_then(Value::as_str)).or_else(
+                    || year_from(item.get("lastModificationDate").and_then(Value::as_str)),
+                ),
+                venue: item
+                    .get("fieldOfScience")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                abstract_text: item
+                    .get("abstract")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 source_url: doi.as_ref().map(|doi| format!("https://doi.org/{doi}")),
                 doi,
                 pdf_url: None,
@@ -167,26 +201,41 @@ pub async fn search_dataverse(
         .and_then(Value::as_array)
     {
         for item in items.iter().take(limit) {
-            let Some(title) = item.get("name").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = item
+                .get("name")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
             let url = item.get("url").and_then(Value::as_str).map(str::to_string);
-            let global_id = item.get("global_id").and_then(Value::as_str).map(str::to_string);
+            let global_id = item
+                .get("global_id")
+                .and_then(Value::as_str)
+                .map(str::to_string);
             let doi = global_id
                 .as_ref()
                 .map(|id| id.trim_start_matches("doi:").to_string());
             papers.push(Paper {
-                id: format!("dataverse:{}", global_id.clone().unwrap_or_else(|| title.to_string())),
+                id: format!(
+                    "dataverse:{}",
+                    global_id.clone().unwrap_or_else(|| title.to_string())
+                ),
                 title: title.to_string(),
                 authors: Vec::new(),
                 year: year_from(item.get("published_at").and_then(Value::as_str)),
-                venue: item.get("publisher").and_then(Value::as_str).map(str::to_string),
+                venue: item
+                    .get("publisher")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 abstract_text: item
                     .get("description")
                     .and_then(Value::as_str)
                     .map(clean_html_text)
                     .filter(|text| !text.is_empty()),
-                source_url: url.clone().or_else(|| doi.as_ref().map(|doi| format!("https://doi.org/{doi}"))),
+                source_url: url
+                    .clone()
+                    .or_else(|| doi.as_ref().map(|doi| format!("https://doi.org/{doi}"))),
                 doi,
                 pdf_url: None,
                 citations: None,
@@ -215,7 +264,11 @@ pub async fn search_ntrs(
     let mut papers = Vec::new();
     if let Some(items) = json.get("results").and_then(Value::as_array) {
         for item in items.iter().take(limit) {
-            let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = item
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
             // NTRS returns the citation id as a JSON number.
@@ -233,8 +286,15 @@ pub async fn search_ntrs(
                 title: title.to_string(),
                 authors: Vec::new(),
                 year: year_from(item.get("distributionDate").and_then(Value::as_str)),
-                venue: item.get("stiType").and_then(Value::as_str).map(str::to_string).or_else(|| Some("NASA NTRS".into())),
-                abstract_text: item.get("abstract").and_then(Value::as_str).map(str::to_string),
+                venue: item
+                    .get("stiType")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| Some("NASA NTRS".into())),
+                abstract_text: item
+                    .get("abstract")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 doi: None,
                 source_url: Some(format!("https://ntrs.nasa.gov/citations/{id}")),
                 pdf_url: None,
@@ -267,7 +327,11 @@ pub async fn search_worldbank(
             if papers.len() >= limit {
                 break;
             }
-            let Some(title) = doc.get("display_title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = doc
+                .get("display_title")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
             papers.push(Paper {
@@ -283,7 +347,10 @@ pub async fn search_worldbank(
                     .and_then(Value::as_str)
                     .or_else(|| doc.get("pdfurl").and_then(Value::as_str))
                     .map(str::to_string),
-                pdf_url: doc.get("pdfurl").and_then(Value::as_str).map(str::to_string),
+                pdf_url: doc
+                    .get("pdfurl")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 citations: None,
                 quartile: None,
                 source: "World Bank".to_string(),
@@ -322,11 +389,15 @@ pub async fn search_doab(
                 .and_then(Value::as_str)
                 .map(str::to_string)
         };
-        let Some(title) = meta_value("dc.title") else { continue };
+        let Some(title) = meta_value("dc.title") else {
+            continue;
+        };
         let authors = metadata
             .map(|list| {
                 list.iter()
-                    .filter(|entry| entry.get("key").and_then(Value::as_str) == Some("dc.contributor.author"))
+                    .filter(|entry| {
+                        entry.get("key").and_then(Value::as_str) == Some("dc.contributor.author")
+                    })
                     .filter_map(|entry| entry.get("value").and_then(Value::as_str))
                     .take(5)
                     .map(str::to_string)
@@ -337,14 +408,19 @@ pub async fn search_doab(
         let uri = meta_value("dc.identifier.uri");
         let doi = meta_value("dc.identifier.doi");
         papers.push(Paper {
-            id: format!("doab:{}", item.get("uuid").and_then(Value::as_str).unwrap_or(&title)),
+            id: format!(
+                "doab:{}",
+                item.get("uuid").and_then(Value::as_str).unwrap_or(&title)
+            ),
             title: clean_html_text(&title),
             authors,
             year: year_from(meta_value("dc.date.issued").as_deref()),
             venue: meta_value("dc.publisher"),
             abstract_text: meta_value("dc.description.abstract").map(|text| clean_html_text(&text)),
             doi,
-            source_url: uri.or_else(|| handle.map(|handle| format!("https://directory.doabooks.org/handle/{handle}"))),
+            source_url: uri.or_else(|| {
+                handle.map(|handle| format!("https://directory.doabooks.org/handle/{handle}"))
+            }),
             pdf_url: None,
             citations: None,
             quartile: None,
@@ -399,7 +475,11 @@ pub async fn search_openaire(
             else {
                 continue;
             };
-            let Some(title) = entity.get("title").and_then(first_text).filter(|text| !text.trim().is_empty()) else {
+            let Some(title) = entity
+                .get("title")
+                .and_then(first_text)
+                .filter(|text| !text.trim().is_empty())
+            else {
                 continue;
             };
             let creators: Vec<String> = entity
@@ -428,9 +508,17 @@ pub async fn search_openaire(
                 id: format!("openaire:{id}"),
                 title: clean_html_text(&title),
                 authors: creators,
-                year: year_from(entity.get("dateofacceptance").and_then(first_text).as_deref()),
+                year: year_from(
+                    entity
+                        .get("dateofacceptance")
+                        .and_then(first_text)
+                        .as_deref(),
+                ),
                 venue: entity.get("publisher").and_then(first_text),
-                abstract_text: entity.get("description").and_then(first_text).map(|text| clean_html_text(&text)),
+                abstract_text: entity
+                    .get("description")
+                    .and_then(first_text)
+                    .map(|text| clean_html_text(&text)),
                 source_url: doi.as_ref().map(|doi| format!("https://doi.org/{doi}")),
                 doi,
                 pdf_url: None,
@@ -461,14 +549,26 @@ pub async fn search_cve_nvd(
     if let Some(items) = json.get("vulnerabilities").and_then(Value::as_array) {
         for item in items.iter().take(limit) {
             let Some(cve) = item.get("cve") else { continue };
-            let Some(id) = cve.get("id").and_then(Value::as_str) else { continue };
+            let Some(id) = cve.get("id").and_then(Value::as_str) else {
+                continue;
+            };
             let description = cve
                 .get("descriptions")
                 .and_then(Value::as_array)
-                .and_then(|list| list.iter().find_map(|entry| entry.get("value").and_then(Value::as_str)));
+                .and_then(|list| {
+                    list.iter()
+                        .find_map(|entry| entry.get("value").and_then(Value::as_str))
+                });
             papers.push(Paper {
                 id: format!("cve:{id}"),
-                title: format!("{id}: {}", description.unwrap_or("Security advisory").chars().take(90).collect::<String>()),
+                title: format!(
+                    "{id}: {}",
+                    description
+                        .unwrap_or("Security advisory")
+                        .chars()
+                        .take(90)
+                        .collect::<String>()
+                ),
                 authors: Vec::new(),
                 year: year_from(cve.get("published").and_then(Value::as_str)),
                 venue: Some("NVD (NIST)".to_string()),
@@ -502,14 +602,24 @@ pub async fn search_huggingface_datasets(
     let mut papers = Vec::new();
     let empty = Vec::new();
     for item in json.as_array().unwrap_or(&empty).iter().take(limit) {
-        let Some(id) = item.get("id").and_then(Value::as_str) else { continue };
+        let Some(id) = item.get("id").and_then(Value::as_str) else {
+            continue;
+        };
         papers.push(Paper {
             id: format!("hfds:{id}"),
             title: id.to_string(),
-            authors: item.get("author").and_then(Value::as_str).map(|author| vec![author.to_string()]).unwrap_or_default(),
+            authors: item
+                .get("author")
+                .and_then(Value::as_str)
+                .map(|author| vec![author.to_string()])
+                .unwrap_or_default(),
             year: year_from(item.get("lastModified").and_then(Value::as_str)),
             venue: Some("Hugging Face Datasets".to_string()),
-            abstract_text: item.get("description").and_then(Value::as_str).map(|text| clean_html_text(text)).filter(|text| !text.is_empty()),
+            abstract_text: item
+                .get("description")
+                .and_then(Value::as_str)
+                .map(|text| clean_html_text(text))
+                .filter(|text| !text.is_empty()),
             doi: None,
             source_url: Some(format!("https://huggingface.co/datasets/{id}")),
             pdf_url: None,
@@ -538,10 +648,17 @@ pub async fn search_stackexchange(
     let mut papers = Vec::new();
     if let Some(items) = json.get("items").and_then(Value::as_array) {
         for item in items.iter().take(limit) {
-            let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+            let Some(title) = item
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|t| !t.trim().is_empty())
+            else {
                 continue;
             };
-            let id = item.get("question_id").and_then(Value::as_u64).unwrap_or_default();
+            let id = item
+                .get("question_id")
+                .and_then(Value::as_u64)
+                .unwrap_or_default();
             papers.push(Paper {
                 id: format!("stackexchange:{id}"),
                 title: clean_html_text(title),
@@ -581,7 +698,13 @@ async fn eutils_json(client: &reqwest::Client, url: &str, label: &str) -> Result
             .header("Accept", "application/json")
             .send()
             .await
-            .map_err(|error| format!("{}: request failed — {}", label, crate::sources::transport_reason(&error)))?;
+            .map_err(|error| {
+                format!(
+                    "{}: request failed — {}",
+                    label,
+                    crate::sources::transport_reason(&error)
+                )
+            })?;
         if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             tokio::time::sleep(std::time::Duration::from_millis(800 * (attempt + 1))).await;
             continue;
@@ -589,14 +712,22 @@ async fn eutils_json(client: &reqwest::Client, url: &str, label: &str) -> Result
         if !response.status().is_success() {
             return Err(format!("{}: HTTP {}", label, response.status()));
         }
-        return response.json::<Value>().await.map_err(|error| format!("{}: json parse failed: {}", label, error));
+        return response
+            .json::<Value>()
+            .await
+            .map_err(|error| format!("{}: json parse failed: {}", label, error));
     }
     Err(format!("{}: HTTP 429 Too Many Requests", label))
 }
 
-async fn esearch_ids(client: &reqwest::Client, db: &str, query: &str, limit: usize) -> Result<Vec<String>, String> {
+async fn esearch_ids(
+    client: &reqwest::Client,
+    db: &str,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<String>, String> {
     let url = format!(
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db={}&term={}&retmode=json&retmax={}&tool=ScholarGateway&email=dqphong0302@gmail.com",
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db={}&term={}&retmode=json&retmax={}&tool=ScholarGate&email=dqphong0302@gmail.com",
         db,
         urlencoding::encode(query),
         limit
@@ -606,13 +737,22 @@ async fn esearch_ids(client: &reqwest::Client, db: &str, query: &str, limit: usi
         .get("esearchresult")
         .and_then(|value| value.get("idlist"))
         .and_then(Value::as_array)
-        .map(|list| list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .map(|list| {
+            list.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default())
 }
 
-async fn esummary(client: &reqwest::Client, db: &str, ids: &[String], label: &str) -> Result<Value, String> {
+async fn esummary(
+    client: &reqwest::Client,
+    db: &str,
+    ids: &[String],
+    label: &str,
+) -> Result<Value, String> {
     let url = format!(
-        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db={}&id={}&retmode=json&tool=ScholarGateway&email=dqphong0302@gmail.com",
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db={}&id={}&retmode=json&tool=ScholarGate&email=dqphong0302@gmail.com",
         db,
         ids.join(",")
     );
@@ -649,7 +789,9 @@ pub async fn search_openfda(
                 .and_then(Value::as_array)
                 .and_then(|list| list.first())
                 .and_then(Value::as_str);
-            let title = brand.or(generic).or_else(|| item.get("id").and_then(Value::as_str));
+            let title = brand
+                .or(generic)
+                .or_else(|| item.get("id").and_then(Value::as_str));
             let Some(title) = title else { continue };
             let id = item.get("id").and_then(Value::as_str).unwrap_or(title);
             papers.push(Paper {
@@ -701,7 +843,9 @@ pub async fn search_uniprot(
     let mut papers = Vec::new();
     if let Some(items) = json.get("results").and_then(Value::as_array) {
         for item in items.iter().take(limit) {
-            let Some(accession) = item.get("primaryAccession").and_then(Value::as_str) else { continue };
+            let Some(accession) = item.get("primaryAccession").and_then(Value::as_str) else {
+                continue;
+            };
             let name = item
                 .get("proteinDescription")
                 .and_then(|d| d.get("recommendedName"))
@@ -747,8 +891,14 @@ pub async fn search_geo(
     let summary = esummary(client, "gds", &ids, "geo").await?;
     let mut papers = Vec::new();
     for id in &ids {
-        let Some(item) = summary.get("result").and_then(|r| r.get(id)) else { continue };
-        let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+        let Some(item) = summary.get("result").and_then(|r| r.get(id)) else {
+            continue;
+        };
+        let Some(title) = item
+            .get("title")
+            .and_then(Value::as_str)
+            .filter(|t| !t.trim().is_empty())
+        else {
             continue;
         };
         papers.push(Paper {
@@ -756,8 +906,15 @@ pub async fn search_geo(
             title: title.to_string(),
             authors: Vec::new(),
             year: year_from(item.get("pdat").and_then(Value::as_str)),
-            venue: item.get("gdstype").and_then(Value::as_str).map(str::to_string).or_else(|| Some("NCBI GEO".into())),
-            abstract_text: item.get("summary").and_then(Value::as_str).map(str::to_string),
+            venue: item
+                .get("gdstype")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| Some("NCBI GEO".into())),
+            abstract_text: item
+                .get("summary")
+                .and_then(Value::as_str)
+                .map(str::to_string),
             doi: None,
             source_url: Some(format!(
                 "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={}",
@@ -787,8 +944,14 @@ pub async fn search_clinvar(
     let summary = esummary(client, "clinvar", &ids, "clinvar").await?;
     let mut papers = Vec::new();
     for id in &ids {
-        let Some(item) = summary.get("result").and_then(|r| r.get(id)) else { continue };
-        let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+        let Some(item) = summary.get("result").and_then(|r| r.get(id)) else {
+            continue;
+        };
+        let Some(title) = item
+            .get("title")
+            .and_then(Value::as_str)
+            .filter(|t| !t.trim().is_empty())
+        else {
             continue;
         };
         papers.push(Paper {
@@ -799,7 +962,9 @@ pub async fn search_clinvar(
             venue: Some("ClinVar".to_string()),
             abstract_text: None,
             doi: None,
-            source_url: Some(format!("https://www.ncbi.nlm.nih.gov/clinvar/variation/{id}/")),
+            source_url: Some(format!(
+                "https://www.ncbi.nlm.nih.gov/clinvar/variation/{id}/"
+            )),
             pdf_url: None,
             citations: None,
             quartile: None,
@@ -826,7 +991,11 @@ pub async fn search_figshare(
     let mut papers = Vec::new();
     let empty = Vec::new();
     for item in json.as_array().unwrap_or(&empty).iter().take(limit) {
-        let Some(title) = item.get("title").and_then(Value::as_str).filter(|t| !t.trim().is_empty()) else {
+        let Some(title) = item
+            .get("title")
+            .and_then(Value::as_str)
+            .filter(|t| !t.trim().is_empty())
+        else {
             continue;
         };
         let id = item.get("id").and_then(Value::as_u64).unwrap_or_default();
@@ -846,7 +1015,11 @@ pub async fn search_figshare(
                 .unwrap_or_default(),
             year: year_from(item.get("published_date").and_then(Value::as_str)),
             venue: Some("Figshare".to_string()),
-            abstract_text: item.get("description").and_then(Value::as_str).map(clean_html_text).filter(|t| !t.is_empty()),
+            abstract_text: item
+                .get("description")
+                .and_then(Value::as_str)
+                .map(clean_html_text)
+                .filter(|t| !t.is_empty()),
             doi: item.get("doi").and_then(Value::as_str).map(str::to_string),
             source_url: item
                 .get("url_public_html")
@@ -876,15 +1049,26 @@ pub async fn search_sec_edgar(
     );
     let response = client
         .get(&url)
-        .header("User-Agent", "ScholarGateway-Desktop/1.0 (mailto:dqphong0302@gmail.com)")
+        .header(
+            "User-Agent",
+            "ScholarGate-Desktop/1.0 (mailto:dqphong0302@gmail.com)",
+        )
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|error| format!("sec_edgar: request failed — {}", crate::sources::transport_reason(&error)))?;
+        .map_err(|error| {
+            format!(
+                "sec_edgar: request failed — {}",
+                crate::sources::transport_reason(&error)
+            )
+        })?;
     if !response.status().is_success() {
         return Err(format!("sec_edgar: HTTP {}", response.status()));
     }
-    let json: Value = response.json().await.map_err(|error| format!("sec_edgar: json parse failed: {}", error))?;
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|error| format!("sec_edgar: json parse failed: {}", error))?;
     let mut papers = Vec::new();
     if let Some(hits) = json
         .get("hits")
@@ -899,8 +1083,13 @@ pub async fn search_sec_edgar(
                 .and_then(|list| list.first())
                 .and_then(Value::as_str)
                 .unwrap_or("SEC filing");
-            let form = source.and_then(|s| s.get("form_type")).and_then(Value::as_str).unwrap_or("filing");
-            let date = source.and_then(|s| s.get("file_date")).and_then(Value::as_str);
+            let form = source
+                .and_then(|s| s.get("form_type"))
+                .and_then(Value::as_str)
+                .unwrap_or("filing");
+            let date = source
+                .and_then(|s| s.get("file_date"))
+                .and_then(Value::as_str);
             let id = hit.get("_id").and_then(Value::as_str).unwrap_or(entity);
             papers.push(Paper {
                 id: format!("sec:{id}"),
@@ -910,7 +1099,10 @@ pub async fn search_sec_edgar(
                 venue: Some("SEC EDGAR".to_string()),
                 abstract_text: None,
                 doi: None,
-                source_url: Some(format!("https://efts.sec.gov/LATEST/search-index?q={}", urlencoding::encode(query))),
+                source_url: Some(format!(
+                    "https://efts.sec.gov/LATEST/search-index?q={}",
+                    urlencoding::encode(query)
+                )),
                 pdf_url: None,
                 citations: None,
                 quartile: None,
@@ -941,23 +1133,42 @@ pub async fn search_cisa_kev(
             let haystack = format!(
                 "{} {} {} {}",
                 item.get("cveID").and_then(Value::as_str).unwrap_or(""),
-                item.get("vendorProject").and_then(Value::as_str).unwrap_or(""),
+                item.get("vendorProject")
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
                 item.get("product").and_then(Value::as_str).unwrap_or(""),
-                item.get("vulnerabilityName").and_then(Value::as_str).unwrap_or("")
+                item.get("vulnerabilityName")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
             )
             .to_lowercase();
-            if !needle.split_whitespace().any(|token| haystack.contains(token)) {
+            if !needle
+                .split_whitespace()
+                .any(|token| haystack.contains(token))
+            {
                 continue;
             }
-            let Some(cve) = item.get("cveID").and_then(Value::as_str) else { continue };
-            let name = item.get("vulnerabilityName").and_then(Value::as_str).unwrap_or("Known exploited vulnerability");
+            let Some(cve) = item.get("cveID").and_then(Value::as_str) else {
+                continue;
+            };
+            let name = item
+                .get("vulnerabilityName")
+                .and_then(Value::as_str)
+                .unwrap_or("Known exploited vulnerability");
             papers.push(Paper {
                 id: format!("kev:{cve}"),
                 title: format!("{cve}: {}", name),
-                authors: item.get("vendorProject").and_then(Value::as_str).map(|v| vec![v.to_string()]).unwrap_or_default(),
+                authors: item
+                    .get("vendorProject")
+                    .and_then(Value::as_str)
+                    .map(|v| vec![v.to_string()])
+                    .unwrap_or_default(),
                 year: year_from(item.get("dateAdded").and_then(Value::as_str)),
                 venue: Some("CISA KEV".to_string()),
-                abstract_text: item.get("shortDescription").and_then(Value::as_str).map(str::to_string),
+                abstract_text: item
+                    .get("shortDescription")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
                 doi: None,
                 source_url: Some(format!("https://nvd.nist.gov/vuln/detail/{cve}")),
                 pdf_url: None,
@@ -978,7 +1189,13 @@ async fn get_json(client: &reqwest::Client, url: &str, label: &str) -> Result<Va
         .header("Accept", "application/json")
         .send()
         .await
-        .map_err(|error| format!("{}: request failed — {}", label, crate::sources::transport_reason(&error)))?;
+        .map_err(|error| {
+            format!(
+                "{}: request failed — {}",
+                label,
+                crate::sources::transport_reason(&error)
+            )
+        })?;
     if !response.status().is_success() {
         return Err(format!("{}: HTTP {}", label, response.status()));
     }

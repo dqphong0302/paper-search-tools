@@ -2,7 +2,7 @@
 //!
 //! The app already knows how to edit an MCP client config (`integrations`) and
 //! how to install a skill folder (`skills`). What it could not do was tell the
-//! user *which* clients exist on this machine, whether ScholarGateway is already
+//! user *which* clients exist on this machine, whether ScholarGate is already
 //! wired into them, and do both edits in one click. This module adds exactly
 //! that: detection plus the two install actions, reusing the safe primitives so
 //! backups, receipts and the "never touch what we did not install" rule apply
@@ -16,10 +16,14 @@ use std::{
 };
 
 /// The entry name this app writes into every client config.
-pub const SERVER_NAME: &str = "scholargateway";
+pub const SERVER_NAME: &str = "scholargate";
+/// The entry name written before the app was renamed. Installing removes it, so
+/// a client set up by an older build is not left with two entries pointing at
+/// the same gateway.
+pub const LEGACY_SERVER_NAME: &str = "scholargateway";
 /// Environment variable Codex reads the gateway token from. Codex only accepts a
 /// variable name, never a literal token, so the secret stays out of the file.
-pub const CODEX_TOKEN_ENV: &str = "SCHOLARGATEWAY_TOKEN";
+pub const CODEX_TOKEN_ENV: &str = "SCHOLARGATE_TOKEN";
 
 const BUNDLED_SKILLS: [(&str, &str); 3] = [
     ("paper-search", "builtin:paper-search"),
@@ -36,6 +40,7 @@ pub struct SkillState {
     /// Installed by this app, so it can also be removed by this app.
     pub managed: bool,
     pub enabled: bool,
+    pub up_to_date: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -111,16 +116,64 @@ fn profiles() -> Vec<Profile> {
 
 /// Split out from `profiles` so the tests can point a full set of clients at a
 /// throwaway home directory instead of touching the real one.
+fn opencode_marker(home: &Path) -> PathBuf {
+    let config_dir = home.join(".config/opencode");
+    if config_dir.is_dir() {
+        config_dir
+    } else {
+        home.join(".opencode")
+    }
+}
+
+fn opencode_config(home: &Path) -> PathBuf {
+    let jsonc = home.join(".config/opencode/opencode.jsonc");
+    if jsonc.exists() {
+        return jsonc;
+    }
+    let json = home.join(".config/opencode/opencode.json");
+    if json.exists() {
+        return json;
+    }
+    let dot_json = home.join(".opencode/config.json");
+    if dot_json.exists() {
+        return dot_json;
+    }
+    home.join(".config/opencode/opencode.jsonc")
+}
+
+fn opencode_skills(home: &Path) -> PathBuf {
+    let config_skills = home.join(".config/opencode/skills");
+    if config_skills.is_dir() {
+        config_skills
+    } else if home.join(".opencode").is_dir() {
+        home.join(".opencode/skills")
+    } else {
+        home.join(".config/opencode/skills")
+    }
+}
+
+fn antigravity_config(home: &Path) -> PathBuf {
+    let standard = home.join(".gemini/config/mcp_config.json");
+    if standard.exists() {
+        return standard;
+    }
+    let legacy = home.join(".gemini/antigravity/mcp_config.json");
+    if legacy.exists() {
+        return legacy;
+    }
+    standard
+}
+
 fn profiles_in(home: &Path) -> Vec<Profile> {
     vec![
         Profile {
-            id: "claude_code",
-            name: "Claude Code",
-            marker: home.join(".claude"),
-            mcp: home.join(".claude.json"),
+            id: "antigravity",
+            name: "Antigravity",
+            marker: home.join(".gemini/antigravity"),
+            mcp: antigravity_config(home),
             toml: false,
-            skills: Some(home.join(".claude/skills")),
-            note: "Run /mcp in Claude Code after installing, or restart it, to pick up the new server.",
+            skills: Some(home.join(".gemini/antigravity/skills")),
+            note: "Reload the MCP servers from Antigravity's MCP panel after installing.",
         },
         Profile {
             id: "claude_desktop",
@@ -128,8 +181,8 @@ fn profiles_in(home: &Path) -> Vec<Profile> {
             marker: claude_desktop_dir(home),
             mcp: claude_desktop_dir(home).join("claude_desktop_config.json"),
             toml: false,
-            skills: None,
-            note: "Quit and reopen Claude Desktop to load the server. Claude Desktop does not read skill folders.",
+            skills: Some(home.join(".claude/skills")),
+            note: "Quit and reopen Claude Desktop after installing. Skills are shared through ~/.claude/skills.",
         },
         Profile {
             id: "codex",
@@ -141,13 +194,13 @@ fn profiles_in(home: &Path) -> Vec<Profile> {
             note: "Codex is configured in TOML. Start a new Codex session after installing.",
         },
         Profile {
-            id: "antigravity",
-            name: "Antigravity",
-            marker: home.join(".gemini/antigravity"),
-            mcp: home.join(".gemini/antigravity/mcp_config.json"),
+            id: "opencode",
+            name: "OpenCode",
+            marker: opencode_marker(home),
+            mcp: opencode_config(home),
             toml: false,
-            skills: Some(home.join(".gemini/antigravity/skills")),
-            note: "Reload the MCP servers from Antigravity's MCP panel after installing.",
+            skills: Some(opencode_skills(home)),
+            note: "Restart OpenCode or run `opencode mcp list` after installing.",
         },
     ]
 }
@@ -194,13 +247,22 @@ pub fn gateway_url(port: u16) -> String {
     format!("http://127.0.0.1:{port}/mcp")
 }
 
+fn gateway_sse_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}/sse")
+}
+
 fn points_at_gateway(definition: &Value, port: u16) -> bool {
-    definition
-        .get("url")
-        .and_then(Value::as_str)
-        .is_some_and(|url| {
-            let url = url.trim_end_matches('/');
-            url == gateway_url(port) || url == format!("http://localhost:{port}/mcp")
+    [("url", "mcp"), ("serverUrl", "sse")]
+        .iter()
+        .any(|(field, path)| {
+            definition
+                .get(*field)
+                .and_then(Value::as_str)
+                .is_some_and(|url| {
+                    let url = url.trim_end_matches('/');
+                    url == format!("http://127.0.0.1:{port}/{path}")
+                        || url == format!("http://localhost:{port}/{path}")
+                })
         })
 }
 
@@ -251,7 +313,10 @@ fn write_toml(path: &Path, document: &toml_edit::DocumentMut) -> Result<Option<S
 }
 
 fn toml_status(document: &toml_edit::DocumentMut, port: u16) -> (Option<String>, bool) {
-    let Some(servers) = document.get("mcp_servers").and_then(|item| item.as_table_like()) else {
+    let Some(servers) = document
+        .get("mcp_servers")
+        .and_then(|item| item.as_table_like())
+    else {
         return (None, false);
     };
     for (name, item) in servers.iter() {
@@ -274,21 +339,27 @@ fn toml_status(document: &toml_edit::DocumentMut, port: u16) -> (Option<String>,
 // ---------------------------------------------------------------------------
 
 fn skill_states(root: &Path) -> (Vec<SkillState>, Option<String>) {
-    let managed = crate::skills::list_skills(root.to_string_lossy().into_owned()).unwrap_or_default();
+    let managed_result = crate::skills::list_skills(root.to_string_lossy().into_owned());
+    let managed = managed_result.as_deref().unwrap_or_default();
     let mut states = Vec::new();
     for (name, source) in BUNDLED_SKILLS {
         let installed = root.join(name).is_dir();
         let entry = managed.iter().find(|skill| skill.name == name);
+        let up_to_date = entry.is_some_and(|skill| {
+            crate::skills::preview_skill(source.to_string())
+                .is_ok_and(|bundle| bundle.content == skill.content)
+        });
         states.push(SkillState {
             name: name.to_string(),
             source: source.to_string(),
             installed,
             managed: entry.is_some(),
             enabled: entry.map(|skill| skill.enabled).unwrap_or(installed),
+            up_to_date,
         });
     }
     let error = if root.is_dir() {
-        None
+        managed_result.err()
     } else {
         Some(format!(
             "{} does not exist yet; installing a skill creates it.",
@@ -348,7 +419,11 @@ fn status(profile: &Profile, port: u16) -> ClientStatus {
         name: profile.name.to_string(),
         detected,
         mcp_path: mcp_path.to_string_lossy().into_owned(),
-        mcp_format: if profile.toml { "toml".into() } else { "json".into() },
+        mcp_format: if profile.toml {
+            "toml".into()
+        } else {
+            "json".into()
+        },
         mcp_installed,
         mcp_managed,
         mcp_entry,
@@ -372,16 +447,29 @@ pub fn list(port: u16) -> Vec<ClientStatus> {
 // Actions
 // ---------------------------------------------------------------------------
 
-/// The server definition written into JSON clients. The token is only included
-/// when the gateway is actually protected by one; the UI warns that it lands in
-/// a plaintext file.
-fn json_definition(port: u16, token: Option<&str>) -> Value {
+/// Claude requires an explicit HTTP transport for URL-based servers. The token
+/// is only included when the gateway is protected; the UI warns that JSON
+/// clients store it in plaintext.
+fn claude_definition(port: u16, token: Option<&str>) -> Value {
     match token.map(str::trim).filter(|token| !token.is_empty()) {
         Some(token) => json!({
+            "type": "http",
             "url": gateway_url(port),
             "headers": { "Authorization": format!("Bearer {token}") },
         }),
-        None => json!({ "url": gateway_url(port) }),
+        None => json!({ "type": "http", "url": gateway_url(port) }),
+    }
+}
+
+/// Antigravity's documented remote transport is legacy SSE and uses
+/// `serverUrl`, not the Streamable HTTP `url` field used by Claude and Codex.
+fn antigravity_definition(port: u16, token: Option<&str>) -> Value {
+    match token.map(str::trim).filter(|token| !token.is_empty()) {
+        Some(token) => json!({
+            "serverUrl": gateway_sse_url(port),
+            "headers": { "Authorization": format!("Bearer {token}") },
+        }),
+        None => json!({ "serverUrl": gateway_sse_url(port) }),
     }
 }
 
@@ -389,7 +477,11 @@ pub fn install_mcp(id: &str, port: u16, token: Option<String>) -> Result<ClientS
     install_mcp_for(&profile(id)?, port, token)
 }
 
-fn install_mcp_for(profile: &Profile, port: u16, token: Option<String>) -> Result<ClientStatus, String> {
+fn install_mcp_for(
+    profile: &Profile,
+    port: u16,
+    token: Option<String>,
+) -> Result<ClientStatus, String> {
     if !profile.marker.is_dir() {
         return Err(format!(
             "{} was not found on this machine ({} is missing)",
@@ -398,12 +490,15 @@ fn install_mcp_for(profile: &Profile, port: u16, token: Option<String>) -> Resul
         ));
     }
     let path = real_path(&profile.mcp);
-    let has_token = token.as_deref().map(str::trim).is_some_and(|token| !token.is_empty());
+    let has_token = token
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|token| !token.is_empty());
     let mut note = None;
     if profile.toml {
         let mut document = read_toml(&path)?;
         if let (Some(existing), false) = toml_status(&document, port) {
-            if existing != SERVER_NAME {
+            if existing != SERVER_NAME && existing != LEGACY_SERVER_NAME {
                 return Err(format!(
                     "{} already points at this gateway under the name '{existing}'. Remove that entry first if you want it managed here.",
                     profile.name
@@ -419,12 +514,12 @@ fn install_mcp_for(profile: &Profile, port: u16, token: Option<String>) -> Resul
         entry.insert("url", toml_edit::value(gateway_url(port)));
         if has_token {
             // Codex reads the token from the environment, never from the file.
-            entry.insert(
-                "bearer_token_env_var",
-                toml_edit::value(CODEX_TOKEN_ENV),
-            );
+            entry.insert("bearer_token_env_var", toml_edit::value(CODEX_TOKEN_ENV));
         }
         servers.insert(SERVER_NAME, toml_edit::Item::Table(entry));
+        // Installing over a config written before the rename would otherwise
+        // leave two entries pointing at the same gateway.
+        servers.remove(LEGACY_SERVER_NAME);
         write_toml(&path, &document)?;
         if has_token {
             note = Some(format!(
@@ -443,13 +538,48 @@ fn install_mcp_for(profile: &Profile, port: u16, token: Option<String>) -> Resul
         } else {
             "add"
         };
+        let definition = if profile.id == "antigravity" {
+            antigravity_definition(port, token.as_deref())
+        } else if profile.id == "opencode" {
+            match token
+                .as_deref()
+                .map(str::trim)
+                .filter(|token| !token.is_empty())
+            {
+                Some(token) => json!({
+                    "type": "remote",
+                    "url": gateway_url(port),
+                    "enabled": true,
+                    "headers": { "Authorization": format!("Bearer {token}") },
+                }),
+                None => json!({
+                    "type": "remote",
+                    "url": gateway_url(port),
+                    "enabled": true,
+                }),
+            }
+        } else {
+            claude_definition(port, token.as_deref())
+        };
         crate::integrations::edit_mcp_config(
             path.to_string_lossy().into_owned(),
             view.revision,
             SERVER_NAME.to_string(),
             action.to_string(),
-            Some(json_definition(port, token.as_deref())),
+            Some(definition),
         )?;
+        // Same cleanup as the TOML path: remove the entry an older build wrote,
+        // but only when this app is the one that created it.
+        if view.managed.contains_key(LEGACY_SERVER_NAME) {
+            let view = crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())?;
+            let _ = crate::integrations::edit_mcp_config(
+                path.to_string_lossy().into_owned(),
+                view.revision,
+                LEGACY_SERVER_NAME.to_string(),
+                "remove".to_string(),
+                None,
+            );
+        }
         if has_token {
             note = Some(format!(
                 "The gateway token was written into {} as an Authorization header. That file is plain text — keep it out of any shared folder or repository.",
@@ -457,7 +587,10 @@ fn install_mcp_for(profile: &Profile, port: u16, token: Option<String>) -> Resul
             ));
         }
     }
-    Ok(ClientStatus { token_note: note, ..status(profile, port) })
+    Ok(ClientStatus {
+        token_note: note,
+        ..status(profile, port)
+    })
 }
 
 pub fn remove_mcp(id: &str, port: u16) -> Result<ClientStatus, String> {
@@ -466,12 +599,20 @@ pub fn remove_mcp(id: &str, port: u16) -> Result<ClientStatus, String> {
 
 fn remove_mcp_for(profile: &Profile, port: u16) -> Result<ClientStatus, String> {
     let path = real_path(&profile.mcp);
+    // Removal has to cover the pre-rename entry as well. A client wired up by an
+    // older build carries the name this app used then, so looking only for the
+    // current one would refuse to uninstall — and leave the stale entry pointing
+    // at a gateway the user is trying to disconnect.
     if profile.toml {
         let mut document = read_toml(&path)?;
         let removed = document
             .get_mut("mcp_servers")
             .and_then(|item| item.as_table_like_mut())
-            .map(|servers| servers.remove(SERVER_NAME).is_some())
+            .map(|servers| {
+                let current = servers.remove(SERVER_NAME).is_some();
+                let legacy = servers.remove(LEGACY_SERVER_NAME).is_some();
+                current || legacy
+            })
             .unwrap_or(false);
         if !removed {
             return Err(format!(
@@ -481,20 +622,28 @@ fn remove_mcp_for(profile: &Profile, port: u16) -> Result<ClientStatus, String> 
         }
         write_toml(&path, &document)?;
     } else {
-        let view = crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())?;
-        if !view.managed.contains_key(SERVER_NAME) {
+        let mut view = crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())?;
+        let names: Vec<&str> = [SERVER_NAME, LEGACY_SERVER_NAME]
+            .into_iter()
+            .filter(|name| view.managed.contains_key(*name))
+            .collect();
+        if names.is_empty() {
             return Err(
                 "Only the entry this app installed can be removed from here; edit the client config yourself for anything else."
                     .to_string(),
             );
         }
-        crate::integrations::edit_mcp_config(
-            path.to_string_lossy().into_owned(),
-            view.revision,
-            SERVER_NAME.to_string(),
-            "remove".to_string(),
-            None,
-        )?;
+        for name in names {
+            crate::integrations::edit_mcp_config(
+                path.to_string_lossy().into_owned(),
+                view.revision.clone(),
+                name.to_string(),
+                "remove".to_string(),
+                None,
+            )?;
+            // Each edit bumps the revision, so re-read before the next one.
+            view = crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())?;
+        }
     }
     Ok(status(profile, port))
 }
@@ -503,23 +652,65 @@ pub fn install_skills(id: &str, port: u16) -> Result<ClientStatus, String> {
     install_skills_for(&profile(id)?, port)
 }
 
+pub fn install_all(id: &str, port: u16, token: Option<String>) -> Result<ClientStatus, String> {
+    let profile = profile(id)?;
+    install_all_for(&profile, port, token)
+}
+
+fn install_all_for(
+    profile: &Profile,
+    port: u16,
+    token: Option<String>,
+) -> Result<ClientStatus, String> {
+    install_mcp_for(&profile, port, token)?;
+    install_skills_for(&profile, port)
+}
+
 fn install_skills_for(profile: &Profile, port: u16) -> Result<ClientStatus, String> {
     let Some(root) = profile.skills.clone() else {
-        return Err(format!("{} does not load skills from a folder", profile.name));
+        return Err(format!(
+            "{} does not load skills from a folder",
+            profile.name
+        ));
     };
     if !profile.marker.is_dir() {
         return Err(format!("{} was not found on this machine", profile.name));
     }
     if !root.exists() {
-        fs::create_dir_all(&root).map_err(|error| {
-            format!("Could not create {}: {error}", root.display())
-        })?;
+        fs::create_dir_all(&root)
+            .map_err(|error| format!("Could not create {}: {error}", root.display()))?;
     }
     let root = real_path(&root);
     let target = root.to_string_lossy().into_owned();
     let mut failures = Vec::new();
     for (name, source) in BUNDLED_SKILLS {
         if root.join(name).is_dir() {
+            let installed = crate::skills::list_skills(target.clone())?
+                .into_iter()
+                .find(|skill| skill.name == name);
+            let current = crate::skills::preview_skill(source.to_string())?;
+            if installed
+                .as_ref()
+                .is_some_and(|skill| skill.content == current.content)
+            {
+                continue;
+            }
+            if installed.is_none() {
+                continue;
+            }
+            match crate::skills::remove_skill(target.clone(), name.to_string()) {
+                Ok(archive) => {
+                    if let Err(error) =
+                        crate::skills::install_skill(source.to_string(), target.clone())
+                    {
+                        let original = root.join(name);
+                        let rollback = fs::rename(&archive, &original)
+                            .map_err(|rollback| format!("{error}; rollback failed: {rollback}"));
+                        failures.push(format!("{name}: {}", rollback.err().unwrap_or(error)));
+                    }
+                }
+                Err(error) => failures.push(format!("{name}: {error}")),
+            }
             continue;
         }
         if let Err(error) = crate::skills::install_skill(source.to_string(), target.clone()) {
@@ -538,7 +729,10 @@ pub fn remove_skills(id: &str, port: u16) -> Result<ClientStatus, String> {
 
 fn remove_skills_for(profile: &Profile, port: u16) -> Result<ClientStatus, String> {
     let Some(root) = profile.skills.clone() else {
-        return Err(format!("{} does not load skills from a folder", profile.name));
+        return Err(format!(
+            "{} does not load skills from a folder",
+            profile.name
+        ));
     };
     let root = real_path(&root);
     let target = root.to_string_lossy().into_owned();
@@ -574,7 +768,13 @@ mod tests {
     fn fake_home() -> PathBuf {
         let home = scratch();
         fs::create_dir_all(home.join(".claude/skills")).unwrap();
-        fs::write(home.join(".claude.json"), br#"{"theme":"dark","mcpServers":{}}"#).unwrap();
+        let claude_desktop = claude_desktop_dir(&home);
+        fs::create_dir_all(&claude_desktop).unwrap();
+        fs::write(
+            claude_desktop.join("claude_desktop_config.json"),
+            br#"{"theme":"dark","mcpServers":{}}"#,
+        )
+        .unwrap();
         fs::create_dir_all(home.join(".codex")).unwrap();
         fs::write(home.join(".codex/config.toml"), "model = \"gpt-5\"\n").unwrap();
         fs::create_dir_all(home.join(".gemini/antigravity")).unwrap();
@@ -583,14 +783,67 @@ mod tests {
             br#"{"mcpServers":{"other":{"command":"/usr/bin/node"}}}"#,
         )
         .unwrap();
+        fs::create_dir_all(home.join(".config/opencode")).unwrap();
+        fs::write(
+            home.join(".config/opencode/opencode.jsonc"),
+            br#"{"$schema":"https://opencode.ai/config.json","mcp":{}}"#,
+        )
+        .unwrap();
         home
+    }
+
+    /// Uninstall has to work for clients wired up before the rename. Removal
+    /// looked only for the current entry name, so a config written by an older
+    /// build answered "no entry to remove" and kept pointing at the gateway the
+    /// user was trying to disconnect.
+    #[test]
+    fn a_client_wired_up_before_the_rename_can_still_be_unwired() {
+        let home = fake_home();
+        let profiles = profiles_in(&home);
+
+        // JSON client (Claude Desktop): entry written under the old name, and
+        // recorded as managed by this app.
+        let claude = find(&profiles, "claude_desktop").unwrap();
+        let path = claude_desktop_dir(&home).join("claude_desktop_config.json");
+        crate::integrations::edit_mcp_config(
+            path.to_string_lossy().into_owned(),
+            crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())
+                .unwrap()
+                .revision,
+            LEGACY_SERVER_NAME.to_string(),
+            "add".to_string(),
+            Some(claude_definition(8795, None)),
+        )
+        .unwrap();
+        let removed = remove_mcp_for(&claude, 8795).unwrap();
+        assert!(!removed.mcp_installed, "the pre-rename entry survived removal");
+        let document: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(document["mcpServers"].get(LEGACY_SERVER_NAME).is_none());
+
+        // TOML client (Codex): same situation in the other config format.
+        let codex = find(&profiles, "codex").unwrap();
+        let codex_path = real_path(&codex.mcp);
+        fs::create_dir_all(codex_path.parent().unwrap()).unwrap();
+        fs::write(
+            &codex_path,
+            format!(
+                "model = \"gpt-5\"\n\n[mcp_servers.{LEGACY_SERVER_NAME}]\nurl = \"{}\"\n",
+                gateway_url(8795)
+            ),
+        )
+        .unwrap();
+        remove_mcp_for(&codex, 8795).unwrap();
+        let written = fs::read_to_string(&codex_path).unwrap();
+        assert!(!written.contains(LEGACY_SERVER_NAME), "{written}");
+        // Unrelated configuration is untouched.
+        assert!(written.contains("model = \"gpt-5\""));
     }
 
     #[test]
     fn a_json_client_is_detected_wired_up_and_can_be_unwired() {
         let home = fake_home();
         let profiles = profiles_in(&home);
-        let claude = find(&profiles, "claude_code").unwrap();
+        let claude = find(&profiles, "claude_desktop").unwrap();
 
         let before = status(&claude, 8795);
         assert!(before.detected);
@@ -602,13 +855,22 @@ mod tests {
         assert!(installed.mcp_installed && installed.mcp_managed);
         assert_eq!(installed.mcp_entry.as_deref(), Some(SERVER_NAME));
         // Everything the client stored outside mcpServers survives the edit.
-        let document: Value =
-            serde_json::from_slice(&fs::read(home.join(".claude.json")).unwrap()).unwrap();
+        let document: Value = serde_json::from_slice(
+            &fs::read(claude_desktop_dir(&home).join("claude_desktop_config.json")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(document["theme"], "dark");
-        assert_eq!(document["mcpServers"][SERVER_NAME]["url"], gateway_url(8795));
+        assert_eq!(document["mcpServers"][SERVER_NAME]["type"], "http");
+        assert_eq!(
+            document["mcpServers"][SERVER_NAME]["url"],
+            gateway_url(8795)
+        );
 
         let with_skills = install_skills_for(&claude, 8795).unwrap();
-        assert!(with_skills.skills.iter().all(|skill| skill.installed && skill.managed));
+        assert!(with_skills
+            .skills
+            .iter()
+            .all(|skill| skill.installed && skill.managed));
         assert!(home.join(".claude/skills/paper-search/SKILL.md").is_file());
 
         // Installing twice must not fail or duplicate anything.
@@ -618,9 +880,29 @@ mod tests {
         assert!(!removed.mcp_installed);
         let cleared = remove_skills_for(&claude, 8795).unwrap();
         assert!(cleared.skills.iter().all(|skill| !skill.installed));
-        let document: Value =
-            serde_json::from_slice(&fs::read(home.join(".claude.json")).unwrap()).unwrap();
+        let document: Value = serde_json::from_slice(
+            &fs::read(claude_desktop_dir(&home).join("claude_desktop_config.json")).unwrap(),
+        )
+        .unwrap();
         assert_eq!(document["theme"], "dark");
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn exposes_four_clients_and_installs_mcp_and_skills_together() {
+        let home = fake_home();
+        let profiles = profiles_in(&home);
+        assert_eq!(
+            profiles
+                .iter()
+                .map(|profile| profile.id)
+                .collect::<Vec<_>>(),
+            vec!["antigravity", "claude_desktop", "codex", "opencode"]
+        );
+        let codex = find(&profiles, "codex").unwrap();
+        let installed = install_all_for(&codex, 8795, None).unwrap();
+        assert!(installed.mcp_installed && installed.mcp_managed);
+        assert!(installed.skills.iter().all(|skill| skill.installed));
         fs::remove_dir_all(home).unwrap();
     }
 
@@ -635,7 +917,7 @@ mod tests {
         assert!(installed.mcp_installed && installed.mcp_managed);
         let written = fs::read_to_string(home.join(".codex/config.toml")).unwrap();
         assert!(written.contains("model = \"gpt-5\""));
-        assert!(written.contains("[mcp_servers.scholargateway]"));
+        assert!(written.contains("[mcp_servers.scholargate]"));
         // Codex only accepts an environment variable name, so the token itself
         // never reaches the file.
         assert!(written.contains(CODEX_TOKEN_ENV));
@@ -662,7 +944,10 @@ mod tests {
         let antigravity = find(&profiles, "antigravity").unwrap();
 
         let state = status(&antigravity, 8795);
-        assert!(state.mcp_installed, "an entry pointing here counts as connected");
+        assert!(
+            state.mcp_installed,
+            "an entry pointing here counts as connected"
+        );
         assert!(!state.mcp_managed);
         assert_eq!(state.mcp_entry.as_deref(), Some("my-own"));
 
@@ -694,7 +979,7 @@ mod tests {
         let written = fs::read_to_string(&path).unwrap();
         assert!(written.starts_with("# user comment\nmodel = \"gpt-5\""));
         assert!(written.contains("[mcp_servers.existing]"));
-        assert!(written.contains("[mcp_servers.scholargateway]"));
+        assert!(written.contains("[mcp_servers.scholargate]"));
         assert_eq!(fs::read_to_string(&backup).unwrap(), original);
 
         let mut document = read_toml(&path).unwrap();
@@ -713,7 +998,7 @@ mod tests {
             .remove(SERVER_NAME);
         write_toml(&path, &document).unwrap();
         let written = fs::read_to_string(&path).unwrap();
-        assert!(!written.contains("scholargateway"));
+        assert!(!written.contains("scholargate"));
         assert!(written.contains("[mcp_servers.existing]"));
         fs::remove_dir_all(root).unwrap();
     }
@@ -728,24 +1013,111 @@ mod tests {
             &json!({"url": "http://localhost:8795/mcp/"}),
             8795
         ));
+        assert!(points_at_gateway(
+            &json!({"serverUrl": "http://127.0.0.1:8795/sse"}),
+            8795
+        ));
         assert!(!points_at_gateway(
             &json!({"url": "http://127.0.0.1:8795/mcp"}),
             8796
         ));
-        assert!(!points_at_gateway(&json!({"command": "/usr/bin/node"}), 8795));
+        assert!(!points_at_gateway(
+            &json!({"command": "/usr/bin/node"}),
+            8795
+        ));
     }
 
     #[test]
     fn a_definition_carries_the_token_only_when_the_gateway_has_one() {
         assert_eq!(
-            json_definition(8795, None),
-            json!({"url": "http://127.0.0.1:8795/mcp"})
+            claude_definition(8795, None),
+            json!({"type": "http", "url": "http://127.0.0.1:8795/mcp"})
         );
-        assert_eq!(json_definition(8795, Some("   ")), json_definition(8795, None));
         assert_eq!(
-            json_definition(8795, Some("s3cret-token-value"))["headers"]["Authorization"],
+            claude_definition(8795, Some("   ")),
+            claude_definition(8795, None)
+        );
+        assert_eq!(
+            claude_definition(8795, Some("s3cret-token-value"))["headers"]["Authorization"],
             "Bearer s3cret-token-value"
         );
+        assert_eq!(
+            antigravity_definition(8795, None),
+            json!({"serverUrl": "http://127.0.0.1:8795/sse"})
+        );
+        assert_eq!(
+            antigravity_definition(8795, Some("s3cret-token-value"))["headers"]["Authorization"],
+            "Bearer s3cret-token-value"
+        );
+    }
+
+    #[test]
+    fn antigravity_uses_its_documented_sse_schema() {
+        let home = fake_home();
+        let profiles = profiles_in(&home);
+        let antigravity = find(&profiles, "antigravity").unwrap();
+
+        let installed = install_mcp_for(&antigravity, 8795, None).unwrap();
+        assert!(installed.mcp_installed && installed.mcp_managed);
+        let document: Value = serde_json::from_slice(
+            &fs::read(home.join(".gemini/antigravity/mcp_config.json")).unwrap(),
+        )
+        .unwrap();
+        let entry = &document["mcpServers"][SERVER_NAME];
+        assert_eq!(entry["serverUrl"], gateway_sse_url(8795));
+        assert!(entry.get("url").is_none());
+        assert!(entry.get("type").is_none());
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    /// Also covers the rename: the marker written here is the pre-rename one,
+    /// so a skill installed by an older build must still be recognised as ours
+    /// and updated rather than treated as somebody else's file.
+    #[test]
+    fn installing_skills_updates_an_unchanged_managed_old_bundle() {
+        let home = fake_home();
+        let skill = home.join(".claude/skills/paper-search");
+        fs::create_dir(&skill).unwrap();
+        let old = b"---\nname: paper-search\ndescription: Old bundle\n---\nOld instructions.";
+        fs::write(skill.join("SKILL.md"), old).unwrap();
+        fs::write(
+            skill.join(".scholargateway-install.json"),
+            serde_json::to_vec_pretty(&json!({
+                "name": "paper-search",
+                "source": "builtin:paper-search",
+                "enabled": true,
+                "hashes": { "SKILL.md": format!("{:x}", md5::compute(old)) }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let claude = find(&profiles_in(&home), "claude_desktop").unwrap();
+        let before = status(&claude, 8795);
+        assert!(
+            !before
+                .skills
+                .iter()
+                .find(|item| item.name == "paper-search")
+                .unwrap()
+                .up_to_date
+        );
+
+        let after = install_skills_for(&claude, 8795).unwrap();
+        assert!(after.skills.iter().all(|item| item.up_to_date));
+        // The pre-rename receipt must not survive the update, or every skill
+        // folder installed by an older build keeps a dead file forever.
+        assert!(
+            !skill.join(".scholargateway-install.json").exists(),
+            "the pre-rename marker was left behind"
+        );
+        assert!(skill.join(".scholargate-install.json").exists());
+        assert_eq!(
+            fs::read_to_string(skill.join("SKILL.md")).unwrap(),
+            crate::skills::preview_skill("builtin:paper-search".into())
+                .unwrap()
+                .content
+        );
+        fs::remove_dir_all(home).unwrap();
     }
 
     #[test]
@@ -766,7 +1138,44 @@ mod tests {
             assert_eq!(real_path(&link), real);
         }
         // A file that does not exist yet still resolves through its parent.
-        assert_eq!(real_path(&root.join("absent.json")), root.join("absent.json"));
+        assert_eq!(
+            real_path(&root.join("absent.json")),
+            root.join("absent.json")
+        );
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn opencode_is_detected_and_wired_up_under_mcp_key() {
+        let home = fake_home();
+        let profiles = profiles_in(&home);
+        let opencode = find(&profiles, "opencode").unwrap();
+
+        let before = status(&opencode, 8795);
+        assert!(before.detected);
+        assert!(!before.mcp_installed);
+        assert_eq!(before.skills.len(), 3);
+
+        let installed = install_mcp_for(&opencode, 8795, None).unwrap();
+        assert!(installed.mcp_installed && installed.mcp_managed);
+        assert_eq!(installed.mcp_entry.as_deref(), Some(SERVER_NAME));
+
+        let document: Value = serde_json::from_slice(
+            &fs::read(home.join(".config/opencode/opencode.jsonc")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(document["mcp"][SERVER_NAME]["type"], "remote");
+        assert_eq!(document["mcp"][SERVER_NAME]["url"], gateway_url(8795));
+        assert_eq!(document["mcp"][SERVER_NAME]["enabled"], true);
+
+        let with_skills = install_skills_for(&opencode, 8795).unwrap();
+        assert!(with_skills.skills.iter().all(|s| s.installed));
+        assert!(home
+            .join(".config/opencode/skills/paper-search/SKILL.md")
+            .is_file());
+
+        let removed = remove_mcp_for(&opencode, 8795).unwrap();
+        assert!(!removed.mcp_installed);
+        fs::remove_dir_all(home).unwrap();
     }
 }

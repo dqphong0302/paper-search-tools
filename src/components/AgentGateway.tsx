@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Activity, Terminal } from 'lucide-react';
 import { TelemetryStats } from '../types';
 import { AgentMonitor } from './AgentMonitor';
-import { IntegrationsPage } from './IntegrationsPage';
-import { AgentAccess } from './AgentAccess';
+import { AiClients } from './AiClients';
 
 interface AgentGatewayProps {
   telemetry: TelemetryStats | null;
@@ -12,14 +11,13 @@ interface AgentGatewayProps {
   port: number;
 }
 
-type Section = 'status' | 'connect' | 'access';
+type Section = 'status' | 'connect';
 
 export const AgentGateway: React.FC<AgentGatewayProps> = ({ telemetry, isOnline, onRefresh, port }) => {
-  const [section, setSection] = useState<Section>('access');
+  const [section, setSection] = useState<Section>('connect');
 
   const tabs: { id: Section; label: string; icon: React.ReactNode }[] = [
-    { id: 'access', label: 'Access', icon: <Terminal size={14} /> },
-    { id: 'connect', label: 'MCP & Skills', icon: <Terminal size={14} /> },
+    { id: 'connect', label: 'Install MCP & skills', icon: <Terminal size={14} /> },
     { id: 'status', label: 'Activity', icon: <Activity size={14} /> },
   ];
 
@@ -68,8 +66,7 @@ export const AgentGateway: React.FC<AgentGatewayProps> = ({ telemetry, isOnline,
           <AgentMonitor telemetry={telemetry} isOnline={isOnline} onRefresh={onRefresh} port={port} />
         </>
       )}
-      {section === 'connect' && <IntegrationsPage port={port} />}
-      {section === 'access' && <AgentAccess />}
+      {section === 'connect' && <AiClients />}
     </div>
   );
 };

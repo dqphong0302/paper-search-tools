@@ -13,7 +13,7 @@ export const McpManager: React.FC<{ port: number }> = ({ port }) => {
   const SAMPLE = JSON.stringify({ url: `http://127.0.0.1:${port}/mcp` }, null, 2);
   const [path, setPath] = useState('');
   const [view, setView] = useState<ConfigView | null>(null);
-  const [name, setName] = useState('scholargateway');
+  const [name, setName] = useState('scholargate');
   const [definition, setDefinition] = useState(SAMPLE);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -51,7 +51,7 @@ export const McpManager: React.FC<{ port: number }> = ({ port }) => {
     <label htmlFor="mcp-server-definition">Server JSON Definition — prefer referencing environment variables; do not paste secrets into shared configs</label>
     <textarea id="mcp-server-definition" className="field-input" rows={8} value={definition} disabled={busy} spellCheck={false} onChange={(event) => setDefinition(event.target.value)} style={{ fontFamily: 'var(--font-mono)', resize: 'vertical' }} />
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      <button id="mcp-template-http" className="action-btn" disabled={busy} onClick={() => setDefinition(SAMPLE)}>ScholarGateway HTTP Template</button>
+      <button id="mcp-template-http" className="action-btn" disabled={busy} onClick={() => setDefinition(SAMPLE)}>ScholarGate HTTP Template</button>
       <button id="mcp-template-stdio" className="action-btn" disabled={busy} onClick={() => setDefinition(JSON.stringify({ command: '/absolute/path/to/node', args: ['/absolute/path/to/server.js'], env: {} }, null, 2))}>stdio Template</button>
       <button id="mcp-copy-config" className="action-btn" disabled={busy} onClick={() => void run(async () => {
         if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new Error('Invalid server identifier');

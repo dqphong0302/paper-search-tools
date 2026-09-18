@@ -1,4 +1,4 @@
-# Roadmap — ScholarGateway Desktop
+# Roadmap — ScholarGate Desktop
 
 > From this round on the log is written in English, matching the app and the README. Earlier entries below are kept as they were written.
 

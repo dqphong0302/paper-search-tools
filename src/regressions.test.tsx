@@ -8,8 +8,9 @@ import { SearchHistory } from './components/SearchHistory';
 import { IntegrationsPage } from './components/IntegrationsPage';
 import { AgentAccess } from './components/AgentAccess';
 import { Library } from './components/Library';
+import { SourceLimiterModal } from './components/SourceLimiterModal';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import type { ResearchWorkspace } from './components/ResearchWorkspace';
+import type { ResearchLibrary } from './components/ResearchWorkspace';
 import { gatewayFetch, initGateway } from './lib/gateway';
 import type { Paper, SearchResponse, WorkspacePaper } from './types';
 
@@ -26,9 +27,9 @@ vi.mock('./components/layout/SideNav', () => ({
     <button id="research" onClick={() => setActiveTab('research')}>Research</button>,
 }));
 vi.mock('./components/ResearchWorkspace', () => ({
-  ResearchWorkspace: ({ workspacePapers, onUpdatePaper }: ComponentProps<typeof ResearchWorkspace>) =>
-    <div id="workspace-papers">
-      {workspacePapers.map(wp => <div key={wp.paper.id}>{wp.paper.title}: {wp.note}</div>)}
+  ResearchLibrary: ({ papers, onUpdatePaper }: ComponentProps<typeof ResearchLibrary>) =>
+    <div id="library-papers">
+      {papers.map((wp: WorkspacePaper) => <div key={wp.paper.id}>{wp.paper.title}: {wp.note}</div>)}
       <button id="update-note" onClick={() => onUpdatePaper('shared', { note: 'edited-A' })}>Update</button>
     </div>,
 }));
@@ -56,20 +57,11 @@ async function click(selector: string) {
   expect(element).not.toBeNull();
   await act(async () => { element!.click(); });
 }
-async function switchWorkspace(value: string) {
-  await act(async () => {
-    const select = host.querySelector<HTMLSelectElement>('#workspace-switcher')!;
-    select.value = value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-  });
-}
-function appRequests(papers: (id: string, init?: RequestInit) => Promise<Response>) {
+function appRequests(papers: (init?: RequestInit) => Promise<Response>) {
   fetchMock.mockImplementation(async (url, init) => {
-    if (url === '/api/workspaces') return response(['A', 'B'].map(id => ({ id, name: id, paper_count: 1 })));
     if (url === '/api/telemetry') return response({ recent_logs: [] });
     if (url === '/api/history/downloads') return response([]);
-    const match = url.match(/^\/api\/workspaces\/([^/]+)\/papers/);
-    if (match) return papers(match[1], init);
+    if (url.startsWith('/api/library')) return papers(init);
     throw new Error(`Unexpected request ${url}`);
   });
 }
@@ -88,12 +80,11 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-describe('workspace request isolation', () => {
-  it('waits for gateway initialization before loading a remembered workspace', async () => {
-    localStorage.setItem('sg_active_workspace', 'A');
+describe('interest library request isolation', () => {
+  it('waits for gateway initialization before loading the library', async () => {
     const ready = deferred<number>();
     vi.mocked(initGateway).mockReturnValue(ready.promise);
-    appRequests(async id => response([workspacePaper(id)]));
+    appRequests(async () => response([workspacePaper('A')]));
     await render(<App />);
     expect(fetchMock).not.toHaveBeenCalled();
     await act(async () => { ready.resolve(9876); });
@@ -101,38 +92,66 @@ describe('workspace request isolation', () => {
     expect(host.textContent).toContain('Workspace-A-paper');
   });
 
-  it('ignores a late response from the previous workspace', async () => {
+  it('ignores an older library response after a manual refresh', async () => {
     const old = deferred<Response>();
-    appRequests(async id => id === 'A' ? old.promise : response([workspacePaper(id)]));
+    let calls = 0;
+    appRequests(async () => ++calls === 1 ? old.promise : response([workspacePaper('B')]));
     await render(<App />);
+    await click('#refresh-gateway-status');
     await click('#research');
-    await switchWorkspace('B');
     expect(host.textContent).toContain('Workspace-B-paper');
     await act(async () => { old.resolve(response([workspacePaper('A')])); });
     expect(host.textContent).toContain('Workspace-B-paper');
     expect(host.textContent).not.toContain('Workspace-A-paper');
   });
 
-  it('hides old papers immediately and does not apply an old note update to the new workspace', async () => {
-    const next = deferred<Response>();
-    const patch = deferred<Response>();
-    appRequests(async (id, init) => init?.method === 'PATCH' ? patch.promise
-      : id === 'B' ? next.promise : response([workspacePaper(id)]));
+  it('applies note updates to the single interest library', async () => {
+    appRequests(async init => init?.method === 'PATCH'
+      ? response({ success: true })
+      : response([workspacePaper('A')]));
     await render(<App />);
     await click('#research');
     await click('#update-note');
-    await switchWorkspace('B');
-    expect(host.textContent).not.toContain('Workspace-A-paper');
-    await act(async () => { next.resolve(response([workspacePaper('B')])); });
-    await act(async () => { patch.resolve(response({ success: true })); });
-    expect(host.textContent).toContain('B-note');
-    expect(host.textContent).not.toContain('edited-A');
+    expect(host.textContent).toContain('edited-A');
+    expect(fetchMock).toHaveBeenCalledWith('/api/library?paper_id=shared', expect.objectContaining({ method: 'PATCH' }));
+  });
+});
+
+describe('topic and source availability setup', () => {
+  it('asks for a topic on first launch and saves the matching available sources', async () => {
+    appRequests(async () => response([]));
+    fetchMock.mockImplementation(async (url, init) => {
+      if (url === '/api/config' && init?.method !== 'POST') return response({});
+      if (url === '/api/config' && init?.method === 'POST') return response({ success: true });
+      if (url === '/api/telemetry') return response({ recent_logs: [] });
+      if (url === '/api/history/downloads' || url === '/api/library') return response([]);
+      throw new Error(`Unexpected request ${url}`);
+    });
+    await render(<App />);
+    expect(host.textContent).toContain('Which field are you searching in?');
+    await click('#topic-biomedical');
+    await click('#topic-setup-save');
+    const save = fetchMock.mock.calls.find(([url, init]) => url === '/api/config' && init?.method === 'POST');
+    const payload = JSON.parse(String(save?.[1]?.body));
+    expect(payload.domain_preset).toBe('biomedical');
+    expect(payload.topic_setup_completed).toBe('true');
+    expect(payload.enabled_sources.split(',').length).toBeGreaterThan(0);
+    expect(host.textContent).not.toContain('Which field are you searching in?');
+  });
+
+  it('hides every unavailable source and therefore hides unavailable-only groups', async () => {
+    await render(<SourceLimiterModal isOpen onClose={() => {}} activeScope="auto" selectedSources={[]} onApplySources={() => {}} />);
+    expect(host.textContent).not.toContain('MedPharmRes');
+    expect(host.textContent).not.toContain('Ho Chi Minh City Journal of Medicine');
+    expect(host.textContent).not.toContain('Papers With Code');
+    expect(host.textContent).not.toContain('PhilJOL');
+    expect(host.textContent).not.toContain('Offline');
   });
 });
 
 describe('search pagination', () => {
   const explorer = (query: string) => <Explorer initialQuery={query} searchNonce={1}
-    port={8795} onSavePaper={() => {}} savedPaperIds={new Set()} workspaceId="A" />;
+    port={8795} onSavePaper={() => {}} savedPaperIds={new Set()} />;
 
   it.each(['success', 'failure'])('ignores an old load-more %s after a new query', async outcome => {
     const old = deferred<Response>();
@@ -166,7 +185,8 @@ describe('search pagination', () => {
     await click('#search-load-more');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const body = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
-    expect(body).toMatchObject({ query: 'A', offset: 1, workspace_id: 'A' });
+    expect(body).toMatchObject({ query: 'A', offset: 1 });
+    expect(body.workspace_id).toBeUndefined();
     expect(body.year_min).toBeUndefined();
     await act(async () => { more.resolve(response(page('A', ['first']))); });
     await click('#search-load-more');
@@ -193,7 +213,7 @@ it('opens paper details on demand and restores keyboard focus on Escape', async 
   const save = vi.fn();
   await render(<Explorer initialQuery="A" port={8795} onSavePaper={save} savedPaperIds={new Set()} />);
   expect(host.querySelector('.paper-detail-panel')).toBeNull();
-  const saveButton = host.querySelector<HTMLButtonElement>('button[title="Save to workspace"]')!;
+  const saveButton = host.querySelector<HTMLButtonElement>('button[title="Add this paper to the interest list"]')!;
   await act(async () => saveButton.click());
   expect(save).toHaveBeenCalledTimes(1);
   await click('.paper-title-button');
@@ -230,12 +250,11 @@ it('previews a bundled skill and installs only after confirmation', async () => 
 });
 
 it('creates scoped read-only access, tests with the agent token and confirms revocation', async () => {
-  const grant = { id: 'agent-one', name: 'Reader', workspace_ids: ['A'], writable: false, revoked: false };
+  const grant = { id: 'agent-one', name: 'Reader', workspace_ids: ['__interest_library__'], writable: false, revoked: false };
   let created = false;
   fetchMock.mockImplementation(async (path, init) => {
-    if (path === '/api/workspaces') return response([{ id: 'A', name: 'Project A' }]);
     if (path === '/api/agents' && init?.method === 'POST') {
-      expect(JSON.parse(String(init.body))).toEqual({ name: 'Reader', workspace_ids: ['A'], writable: false });
+      expect(JSON.parse(String(init.body))).toEqual({ name: 'Reader', workspace_ids: [], writable: false });
       created = true;
       return response({ agent: grant, token: 'sg_agent_fixture' });
     }
@@ -251,7 +270,6 @@ it('creates scoped read-only access, tests with the agent token and confirms rev
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'Reader');
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  await click('#agent-workspace-A');
   await click('#agent-create');
   expect(host.querySelector<HTMLInputElement>('#agent-new-token')!.value).toBe('sg_agent_fixture');
   expect(localStorage.getItem('sg_agent_fixture')).toBeNull();
@@ -259,7 +277,7 @@ it('creates scoped read-only access, tests with the agent token and confirms rev
   expect(probe).toHaveBeenCalledWith('http://localhost:8795/mcp', expect.objectContaining({
     headers: expect.objectContaining({ Authorization: 'Bearer sg_agent_fixture' }),
   }));
-  expect(host.textContent).toContain('Project access verified');
+  expect(host.textContent).toContain('Interest library access verified');
   await click('#agent-revoke-agent-one');
   expect(grant.revoked).toBe(false);
   confirm.mockReturnValue(true);
@@ -310,19 +328,19 @@ it('lets users choose a discipline before their first search without changing ke
     port={8795} onSavePaper={() => {}} savedPaperIds={new Set()} />;
   await render(view());
   await click('#search-options > summary');
-  await click('#discipline-engineering');
-  expect(host.querySelector('#discipline-engineering')!.getAttribute('aria-pressed')).toBe('true');
+  await click('#discipline-stem_nature');
+  expect(host.querySelector('#discipline-stem_nature')!.getAttribute('aria-pressed')).toBe('true');
   expect(fetchMock).not.toHaveBeenCalled();
   await click('#search-apply-options');
   expect(submit).toHaveBeenCalledExactlyOnceWith('6g network');
   await render(view('6g network', 1));
   expect(fetchMock).toHaveBeenCalledTimes(1);
   expect(host.querySelector<HTMLDetailsElement>('#search-options')!.open).toBe(false);
-  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ query: '6g network', sources: ['engineering'] });
-  await click('#discipline-cs_ai');
+  expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ query: '6g network', sources: ['stem_nature'] });
+  await click('#discipline-ai_cs');
   expect(fetchMock).toHaveBeenCalledTimes(1);
   await render(view('6g network', 2));
-  expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({ query: '6g network', sources: ['cs_ai'] });
+  expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({ query: '6g network', sources: ['ai_cs'] });
   await click('#search-reset-options');
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(host.querySelector<HTMLSelectElement>('#search-scope')!.value).toBe('default');
@@ -330,15 +348,15 @@ it('lets users choose a discipline before their first search without changing ke
   expect(host.textContent).not.toContain('Paper-first');
 });
 
-it('clears history only for the displayed workspace', async () => {
+it('clears the global search history without a workspace filter', async () => {
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   fetchMock.mockResolvedValueOnce(response([{ id: 's1', query: 'fixture', result_count: 1, elapsed_ms: 1, created_at: 1 }]))
     .mockResolvedValueOnce(response({ success: true }));
-  await render(<SearchHistory port={8795} workspaceId="A" onRerunSearch={() => {}} />);
+  await render(<SearchHistory port={8795} onRerunSearch={() => {}} />);
   const clear = [...host.querySelectorAll('button')].find(button => button.textContent?.includes('Clear All'))!;
   await act(async () => { clear.click(); });
-  expect(fetchMock).toHaveBeenLastCalledWith('/api/history/searches?workspace_id=A', { method: 'DELETE' });
-  expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('in this workspace'));
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/history/searches', { method: 'DELETE' });
+  expect(window.confirm).toHaveBeenCalledWith('Clear all search history? This cannot be undone.');
 });
 
 // Sources still waiting for an API key were counted in the "N/M sources

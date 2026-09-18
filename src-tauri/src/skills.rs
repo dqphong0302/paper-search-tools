@@ -7,8 +7,24 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-const MARKER: &str = ".scholargateway-install.json";
+const MARKER: &str = ".scholargate-install.json";
+/// Marker written before the app was renamed. Skills installed by an older
+/// build still carry it, and without accepting it the app would stop
+/// recognising — and so stop managing or updating — its own installs.
+const LEGACY_MARKER: &str = ".scholargateway-install.json";
 const DISABLED: &str = "SKILL.md.disabled";
+
+/// Removes the pre-rename receipt once the current one is in place.
+///
+/// Both markers are ignored when the skill's files are hashed, so leaving the
+/// old one behind would not corrupt anything — it would just sit in the user's
+/// skill folder forever, and a later read could still pick it up.
+fn drop_legacy_marker(target: &Path) {
+    let legacy = target.join(LEGACY_MARKER);
+    if legacy.exists() {
+        let _ = fs::remove_file(legacy);
+    }
+}
 const MAX_BYTES: usize = 20 * 1024 * 1024;
 // Serialize our own install/toggle/remove operations, including concurrent IPC calls.
 static OPERATIONS: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -21,7 +37,10 @@ fn bundled_files(source: &str) -> Result<Files, String> {
         "builtin:research-resume" => include_str!("../../skills/research-resume/SKILL.md"),
         _ => return Err("Unknown bundled skill".into()),
     };
-    Ok(BTreeMap::from([("SKILL.md".into(), content.as_bytes().to_vec())]))
+    Ok(BTreeMap::from([(
+        "SKILL.md".into(),
+        content.as_bytes().to_vec(),
+    )]))
 }
 
 fn source_files(source: &str) -> Result<(PathBuf, Files), String> {
@@ -118,7 +137,7 @@ fn snapshot(root: &Path, installed: bool) -> Result<Files, String> {
             }
             #[cfg(windows)]
             let relative = relative.replace('\\', "/");
-            if relative == MARKER {
+            if relative == MARKER || relative == LEGACY_MARKER {
                 if installed {
                     continue;
                 }
@@ -197,9 +216,13 @@ fn hashes(files: &Files) -> BTreeMap<String, String> {
 }
 
 fn receipt(path: &Path) -> Result<Receipt, String> {
-    let marker = path.join(MARKER);
+    let marker = if path.join(MARKER).exists() {
+        path.join(MARKER)
+    } else {
+        path.join(LEGACY_MARKER)
+    };
     let meta =
-        fs::symlink_metadata(&marker).map_err(|_| "Not a skill installed by ScholarGateway")?;
+        fs::symlink_metadata(&marker).map_err(|_| "Not a skill installed by ScholarGate")?;
     if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 100_000 {
         return Err("Invalid receipt".into());
     }
@@ -231,7 +254,9 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 #[tauri::command]
 pub fn preview_skill(source: String) -> Result<SkillInfo, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     let (path, files) = source_files(&source)?;
     if files.contains_key(DISABLED) {
         return Err("Source contains the reserved SKILL.md.disabled file".into());
@@ -251,7 +276,9 @@ pub fn preview_skill(source: String) -> Result<SkillInfo, String> {
 
 #[tauri::command]
 pub fn install_skill(source: String, target_root: String) -> Result<SkillInfo, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     let (source_path, files) = source_files(&source)?;
     let root = directory(&target_root)?;
     if files.contains_key(DISABLED) {
@@ -271,7 +298,11 @@ pub fn install_skill(source: String, target_root: String) -> Result<SkillInfo, S
         }
         let receipt = Receipt {
             name,
-            source: if source.starts_with("builtin:") { source.clone() } else { source_path.to_string_lossy().into() },
+            source: if source.starts_with("builtin:") {
+                source.clone()
+            } else {
+                source_path.to_string_lossy().into()
+            },
             enabled: true,
             hashes: hashes(&files),
         };
@@ -279,6 +310,7 @@ pub fn install_skill(source: String, target_root: String) -> Result<SkillInfo, S
             &target.join(MARKER),
             &serde_json::to_vec_pretty(&receipt).map_err(|e| e.to_string())?,
         )?;
+        drop_legacy_marker(&target);
         info(&target, &receipt, &files)
     })();
     // Preserve incomplete files for recovery rather than deleting anything on failure.
@@ -292,7 +324,9 @@ pub fn install_skill(source: String, target_root: String) -> Result<SkillInfo, S
 
 #[tauri::command]
 pub fn list_skills(target_root: String) -> Result<Vec<SkillInfo>, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     let root = directory(&target_root)?;
     let mut result = Vec::new();
     for entry in fs::read_dir(root).map_err(|e| e.to_string())? {
@@ -311,7 +345,7 @@ pub fn list_skills(target_root: String) -> Result<Vec<SkillInfo>, String> {
         {
             continue;
         }
-        if !path.join(MARKER).exists() {
+        if !path.join(MARKER).exists() && !path.join(LEGACY_MARKER).exists() {
             continue;
         }
         let receipt = receipt(&path)?;
@@ -323,7 +357,9 @@ pub fn list_skills(target_root: String) -> Result<Vec<SkillInfo>, String> {
 
 #[tauri::command]
 pub fn remove_skill(target_root: String, name: String) -> Result<String, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     if !valid_name(&name) {
         return Err("Invalid skill name".into());
     }
@@ -336,7 +372,7 @@ pub fn remove_skill(target_root: String, name: String) -> Result<String, String>
             "The skill changed after installation; not removing it automatically so your edits are kept".into(),
         );
     }
-    let archive = root.join(format!(".scholargateway-removed-{}", uuid::Uuid::new_v4()));
+    let archive = root.join(format!(".scholargate-removed-{}", uuid::Uuid::new_v4()));
     fs::rename(&target, &archive).map_err(|e| e.to_string())?;
     Ok(archive.to_string_lossy().into())
 }
@@ -347,7 +383,9 @@ pub fn set_skill_enabled(
     name: String,
     enabled: bool,
 ) -> Result<SkillInfo, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The skill manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The skill manager is in a failed state")?;
     if !valid_name(&name) {
         return Err("Invalid skill name".into());
     }
@@ -383,6 +421,7 @@ pub fn set_skill_enabled(
         let _ = fs::rename(target.join(to), target.join(from));
         return Err(format!("Could not update the receipt: {error}"));
     }
+    drop_legacy_marker(&target);
     info(&target, &receipt, &files)
 }
 
@@ -410,7 +449,10 @@ mod tests {
         assert_eq!(list_skills(target.clone()).unwrap().len(), 3);
         fs::write(root.join("paper-search/SKILL.md"), "User edits").unwrap();
         assert!(remove_skill(target.clone(), "paper-search".into()).is_err());
-        assert_eq!(fs::read_to_string(root.join("paper-search/SKILL.md")).unwrap(), "User edits");
+        assert_eq!(
+            fs::read_to_string(root.join("paper-search/SKILL.md")).unwrap(),
+            "User edits"
+        );
         assert!(preview_skill("builtin:../unknown".into()).is_err());
         assert!(install_skill("builtin:../unknown".into(), target).is_err());
         fs::remove_dir_all(root).unwrap();

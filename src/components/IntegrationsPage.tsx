@@ -89,7 +89,7 @@ export const IntegrationsPage: React.FC<{ port: number }> = ({ port }) => {
     </fieldset>
 
     <section className="cockpit-card" aria-labelledby="skills-installed-title">
-      <h2 id="skills-installed-title">Installed ScholarGateway Skills</h2>
+      <h2 id="skills-installed-title">Installed ScholarGate Skills</h2>
       <p className="page-subtitle">Disabling renames SKILL.md to SKILL.md.disabled. Removing moves the folder to a recoverable hidden archive rather than permanently deleting.</p>
       {loadedRoot && skills.length === 0 && <p>No app-managed skills found in this directory.</p>}
       {!loadedRoot && <p>Enter target skills directory and click Read Directory.</p>}

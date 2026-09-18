@@ -8,6 +8,7 @@ export interface ClientSkillState {
   installed: boolean;
   managed: boolean;
   enabled: boolean;
+  up_to_date: boolean;
 }
 
 export interface AiClientStatus {
@@ -27,7 +28,9 @@ export interface AiClientStatus {
   token_note: string | null;
 }
 
-type Action = 'install_mcp' | 'remove_mcp' | 'install_skills' | 'remove_skills';
+type Action = 'install_all' | 'install_mcp' | 'remove_mcp' | 'install_skills' | 'remove_skills';
+
+const CLIENT_ORDER = ['codex', 'antigravity', 'claude_desktop', 'opencode'];
 
 const StatusPill: React.FC<{ ok: boolean; okLabel: string; offLabel: string }> = ({ ok, okLabel, offLabel }) => (
   <span
@@ -72,10 +75,11 @@ export const AiClients: React.FC = () => {
 
   const run = async (client: AiClientStatus, action: Action) => {
     const confirmations: Record<Action, string> = {
-      install_mcp: `Add the ScholarGateway MCP server to ${client.name}?\nFile: ${client.mcp_path}\nA backup of the current file is kept.`,
-      remove_mcp: `Remove the ScholarGateway MCP server from ${client.name}?\nFile: ${client.mcp_path}`,
-      install_skills: `Install the three bundled ScholarGateway skills into ${client.skills_path}?`,
-      remove_skills: `Remove the bundled ScholarGateway skills from ${client.skills_path}?\nEach folder is moved to a recoverable archive, not deleted.`,
+      install_all: `Install the ScholarGate MCP entry and 3 skills for ${client.name}?\nThe current configuration is backed up before it is changed.`,
+      install_mcp: `Add the ScholarGate MCP server to ${client.name}?\nFile: ${client.mcp_path}\nA backup of the current file is kept.`,
+      remove_mcp: `Remove the ScholarGate MCP server from ${client.name}?\nFile: ${client.mcp_path}`,
+      install_skills: `Install the three bundled ScholarGate skills into ${client.skills_path}?`,
+      remove_skills: `Remove the bundled ScholarGate skills from ${client.skills_path}?\nEach folder is moved to a recoverable archive, not deleted.`,
     };
     if (!window.confirm(confirmations[action])) return;
     setBusy(`${client.id}:${action}`);
@@ -87,7 +91,9 @@ export const AiClients: React.FC = () => {
       setClients((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
       if (updated.token_note) setTokenNote(updated.token_note);
       setMessage(
-        action === 'install_mcp'
+        action === 'install_all'
+          ? `${client.name}: MCP and 3 skills installed. ${client.note}`
+          : action === 'install_mcp'
           ? `${client.name}: MCP server added. ${client.note}`
           : action === 'remove_mcp'
             ? `${client.name}: MCP server removed. ${client.note}`
@@ -116,7 +122,7 @@ export const AiClients: React.FC = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, maxWidth: 640 }}>
           Connects this gateway to the AI clients on this machine. Installing writes one MCP server entry
-          named <code>scholargateway</code> and copies the three bundled skills; the previous config file is
+          named <code>scholargate</code> and copies the three bundled skills; the previous config file is
           backed up first, and entries this app did not create are never modified.
         </p>
         <button id="ai-clients-refresh" className="action-btn" onClick={() => void refresh()} disabled={loading}>
@@ -135,9 +141,13 @@ export const AiClients: React.FC = () => {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
-        {clients.map((client) => {
+        {[...clients].sort((a, b) => CLIENT_ORDER.indexOf(a.id) - CLIENT_ORDER.indexOf(b.id)).map((client) => {
           const skillsInstalled = client.skills.filter((skill) => skill.installed).length;
           const managedSkills = client.skills.filter((skill) => skill.managed).length;
+          const fullyInstalled = client.mcp_installed
+            && skillsInstalled === client.skills.length
+            && client.skills.length > 0
+            && client.skills.every((skill) => !skill.managed || skill.up_to_date);
           return (
             <article
               key={client.id}
@@ -166,15 +176,26 @@ export const AiClients: React.FC = () => {
 
               {client.detected && (
                 <>
+                  <button
+                    id={`ai-client-${client.id}-install-all`}
+                    className="action-btn action-btn-primary"
+                    style={{ width: '100%', justifyContent: 'center', padding: '8px 12px' }}
+                    disabled={!!busy || !!client.mcp_error || (client.mcp_installed && !client.mcp_managed)}
+                    onClick={() => void run(client, 'install_all')}
+                  >
+                    {busy === `${client.id}:install_all` ? <RefreshCw size={14} className="animate-spin" /> : <Plug size={14} />}
+                    <Package size={14} />
+                    <span>{fullyInstalled ? 'Reinstall MCP + skills' : 'Install MCP + skills'}</span>
+                  </button>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Plug size={13} style={{ color: 'var(--primary-cyan)' }} />
                       <span style={{ fontSize: 12, fontWeight: 600 }}>MCP server</span>
-                      <StatusPill ok={client.mcp_installed} okLabel="CONNECTED" offLabel="NOT CONNECTED" />
+                      <StatusPill ok={client.mcp_installed} okLabel="CONFIGURED" offLabel="NOT CONFIGURED" />
                       <span className="cockpit-badge" style={{ fontSize: 9 }}>{client.mcp_format.toUpperCase()}</span>
                     </div>
                     <code style={{ fontSize: 10, color: 'var(--text-dim)', overflowWrap: 'anywhere' }}>{client.mcp_path}</code>
-                    {client.mcp_installed && client.mcp_entry && client.mcp_entry !== 'scholargateway' && (
+                    {client.mcp_installed && client.mcp_entry && client.mcp_entry !== 'scholargate' && (
                       <span style={{ fontSize: 10.5, color: 'var(--status-amber)' }}>
                         Already present under the name “{client.mcp_entry}”, which this app did not create.
                       </span>
@@ -186,16 +207,6 @@ export const AiClients: React.FC = () => {
                       </span>
                     )}
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button
-                        id={`ai-client-${client.id}-install-mcp`}
-                        className="action-btn action-btn-primary"
-                        style={{ padding: '4px 10px', fontSize: 11 }}
-                        disabled={!!busy || !!client.mcp_error || (client.mcp_installed && !client.mcp_managed)}
-                        onClick={() => void run(client, 'install_mcp')}
-                      >
-                        {busy === `${client.id}:install_mcp` ? <RefreshCw size={12} className="animate-spin" /> : <Plug size={12} />}
-                        <span>{client.mcp_managed ? 'Reinstall' : 'Install MCP'}</span>
-                      </button>
                       {client.mcp_managed && (
                         <button
                           id={`ai-client-${client.id}-remove-mcp`}
@@ -236,28 +247,18 @@ export const AiClients: React.FC = () => {
                               title={
                                 skill.installed
                                   ? skill.managed
-                                    ? `${skill.name} installed by ScholarGateway${skill.enabled ? '' : ' (disabled)'}`
+                                    ? `${skill.name} installed by ScholarGate${skill.enabled ? '' : ' (disabled)'}${skill.up_to_date ? '' : ' (update available)'}`
                                     : `${skill.name} exists but was not installed by this app`
                                   : `${skill.name} not installed`
                               }
                               style={{ cursor: 'default' }}
                             >
                               {skill.installed && <CheckCircle2 size={10} />}
-                              <span>{skill.name}</span>
+                              <span>{skill.name}{skill.managed && !skill.up_to_date ? ' · update' : ''}</span>
                             </span>
                           ))}
                         </div>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          <button
-                            id={`ai-client-${client.id}-install-skills`}
-                            className="action-btn"
-                            style={{ padding: '4px 10px', fontSize: 11 }}
-                            disabled={!!busy || skillsInstalled === client.skills.length}
-                            onClick={() => void run(client, 'install_skills')}
-                          >
-                            {busy === `${client.id}:install_skills` ? <RefreshCw size={12} className="animate-spin" /> : <Package size={12} />}
-                            <span>Install skills</span>
-                          </button>
                           {managedSkills > 0 && (
                             <button
                               id={`ai-client-${client.id}-remove-skills`}

@@ -98,6 +98,33 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
     }
   };
 
+  // Read the real folder off the records rather than printing a fixed path:
+  // the directory is configurable, and an install that predates the rename
+  // keeps using its old folder, so a hardcoded default would be wrong twice.
+  const storageFolder = React.useMemo(() => {
+    const path = downloads[0]?.local_path;
+    if (!path) return null;
+    const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return cut > 0 ? path.slice(0, cut) : null;
+  }, [downloads]);
+
+  const handleClearAll = async () => {
+    // Wording matters here: this forgets records, it does not touch the user's
+    // files. The single-record delete already makes the same promise.
+    if (!window.confirm(
+      `Clear all ${downloads.length} download records? The PDF files on disk are kept. This cannot be undone.`
+    )) return;
+    setError(null);
+    try {
+      const suffix = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+      const res = await gatewayFetch(`/api/history/downloads${suffix}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Server returned status code ${res.status}`);
+      setDownloads([]);
+    } catch (e) {
+      setError(`Failed to clear download history: ${(e as Error).message}`);
+    }
+  };
+
   const copyPath = (id: string, path: string) => {
     navigator.clipboard.writeText(path).then(() => {
       setCopiedId(id);
@@ -145,7 +172,16 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
             <span className="cockpit-badge badge-emerald">{downloads.length} Documents</span>
           </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            Stored locally in <code style={{ color: 'var(--primary-cyan)', fontFamily: 'var(--font-mono)' }}>~/Documents/ScholarGateway/Papers</code>
+            {storageFolder ? (
+              <>
+                Stored locally in{' '}
+                <code style={{ color: 'var(--primary-cyan)', fontFamily: 'var(--font-mono)' }}>
+                  {storageFolder}
+                </code>
+              </>
+            ) : (
+              'Downloaded PDFs are stored in the folder set under Settings → Gateway & Security.'
+            )}
           </p>
         </div>
 
@@ -173,6 +209,18 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             <span>Sync</span>
           </button>
+
+          {downloads.length > 0 && (
+            <button
+              id="clear-download-history"
+              className="action-btn action-btn-danger"
+              onClick={handleClearAll}
+              title="Forget every download record (the PDF files on disk are kept)"
+            >
+              <Trash2 size={14} />
+              <span>Clear All</span>
+            </button>
+          )}
         </div>
       </div>
 

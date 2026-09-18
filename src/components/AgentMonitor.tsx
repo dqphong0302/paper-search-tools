@@ -51,7 +51,7 @@ export const AgentMonitor: React.FC<AgentMonitorProps> = ({ telemetry, isOnline,
   const claudeConfig = JSON.stringify(
     {
       mcpServers: {
-        scholargateway: {
+        scholargate: {
           url: `http://localhost:${port}/mcp`,
           headers: { Authorization: 'Bearer <MCP_AUTH_TOKEN>' },
         },

@@ -1,11 +1,12 @@
-pub mod ojs;
-pub mod nasati;
+pub mod ai_search;
 pub mod biomedical;
 pub mod cs_ai;
-pub mod open_repos;
 pub mod keyed;
-pub mod ai_search;
+pub mod nasati;
+pub mod ojs;
+pub mod open_repos;
 pub mod public_apis;
+pub mod registry;
 
 /// Error for a keyed source that answered with an authentication failure. The key
 /// exists but the provider rejected it, so the remedy is the same as a missing
@@ -105,7 +106,6 @@ pub fn parse_author_list(raw: &str) -> Vec<String> {
         .collect()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,9 +116,13 @@ mod tests {
     #[test]
     fn rejected_credentials_are_reported_as_needing_setup() {
         for status in [401u16, 403] {
-            let message = keyed_http_error("scopus", reqwest::StatusCode::from_u16(status).unwrap());
+            let message =
+                keyed_http_error("scopus", reqwest::StatusCode::from_u16(status).unwrap());
             assert!(message.starts_with(NEEDS_SETUP), "{message}");
-            assert!(message.contains("rejected the saved credential"), "{message}");
+            assert!(
+                message.contains("rejected the saved credential"),
+                "{message}"
+            );
             assert!(message.contains(&status.to_string()), "{message}");
         }
     }

@@ -40,8 +40,12 @@ pub struct ConfigView {
 
 fn config_path(path: &str) -> Result<PathBuf, String> {
     let path = Path::new(path);
-    if path.extension().and_then(|s| s.to_str()) != Some("json") {
-        return Err("Only .json files with an mcpServers object are supported, not TOML/JSONC".into());
+    let ext = path.extension().and_then(|s| s.to_str());
+    if ext != Some("json") && ext != Some("jsonc") {
+        return Err(
+            "Only .json or .jsonc files with an mcpServers/mcp object are supported, not TOML"
+                .into(),
+        );
     }
     let parent = crate::skills::directory(
         path.parent()
@@ -59,9 +63,67 @@ fn config_path(path: &str) -> Result<PathBuf, String> {
 
 fn sidecar(path: &Path) -> PathBuf {
     path.with_file_name(format!(
-        ".{}.scholargateway.json",
+        ".{}.scholargate.json",
         path.file_name().unwrap().to_string_lossy()
     ))
+}
+
+fn strip_jsonc_comments(raw: &[u8]) -> Vec<u8> {
+    let text = match std::str::from_utf8(raw) {
+        Ok(s) => s,
+        Err(_) => return raw.to_vec(),
+    };
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+    while let Some(ch) = chars.next() {
+        if in_string {
+            out.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+        } else if ch == '"' {
+            in_string = true;
+            out.push(ch);
+        } else if ch == '/' && chars.peek() == Some(&'/') {
+            chars.next();
+            for line_ch in chars.by_ref() {
+                if line_ch == '\n' {
+                    out.push('\n');
+                    break;
+                }
+            }
+        } else if ch == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            while let Some(block_ch) = chars.next() {
+                if block_ch == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
+                    break;
+                }
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    out.into_bytes()
+}
+
+fn mcp_key_for(value: &Value) -> &'static str {
+    if value.get("mcp").is_some()
+        || value
+            .get("$schema")
+            .and_then(Value::as_str)
+            .is_some_and(|s| s.contains("opencode"))
+    {
+        "mcp"
+    } else {
+        "mcpServers"
+    }
 }
 
 fn read_bytes(path: &Path) -> Result<Option<Vec<u8>>, String> {
@@ -86,15 +148,20 @@ fn revision(document: &Option<Vec<u8>>, receipt: &Option<Vec<u8>>) -> String {
 
 fn parse_document(bytes: &Option<Vec<u8>>) -> Result<Value, String> {
     let value: Value = match bytes {
-        Some(bytes) => serde_json::from_slice(bytes).map_err(|e| e.to_string())?,
+        Some(raw) => {
+            let cleaned = strip_jsonc_comments(raw);
+            serde_json::from_slice(&cleaned).map_err(|e| e.to_string())?
+        }
         None => json!({"mcpServers":{}}),
     };
-    if !value.is_object()
-        || value
-            .get("mcpServers")
-            .is_some_and(|servers| !servers.is_object())
-    {
-        return Err("Expected a JSON object whose mcpServers field is an object".into());
+    if !value.is_object() {
+        return Err("Expected a JSON object".into());
+    }
+    let key = mcp_key_for(&value);
+    if value.get(key).is_some_and(|servers| !servers.is_object()) {
+        return Err(format!(
+            "Expected a JSON object whose {key} field is an object"
+        ));
     }
     Ok(value)
 }
@@ -107,10 +174,9 @@ fn load(path: &Path) -> Result<(Value, Receipt, String), String> {
         Some(bytes) => serde_json::from_slice(bytes).map_err(|e| e.to_string())?,
         None => Receipt::default(),
     };
+    let key = mcp_key_for(&document);
     for (name, entry) in &receipt.entries {
-        let current = document
-            .get("mcpServers")
-            .and_then(|servers| servers.get(name));
+        let current = document.get(key).and_then(|servers| servers.get(name));
         if (entry.enabled && current != Some(&entry.definition))
             || (!entry.enabled && current.is_some())
         {
@@ -125,10 +191,11 @@ fn load(path: &Path) -> Result<(Value, Receipt, String), String> {
 
 fn view(path: &Path, backup: Option<String>) -> Result<ConfigView, String> {
     let (document, receipt, revision) = load(path)?;
+    let key = mcp_key_for(&document);
     Ok(ConfigView {
         path: path.to_string_lossy().into(),
         revision,
-        servers: serde_json::from_value(document.get("mcpServers").cloned().unwrap_or(json!({})))
+        servers: serde_json::from_value(document.get(key).cloned().unwrap_or(json!({})))
             .map_err(|e| e.to_string())?,
         managed: receipt.entries,
         backup,
@@ -136,15 +203,29 @@ fn view(path: &Path, backup: Option<String>) -> Result<ConfigView, String> {
 }
 
 fn validate_definition(value: &Value) -> Result<(), String> {
-    let object = value.as_object().ok_or("Server entry must be a JSON object")?;
-    if object
-        .keys()
-        .any(|key| !["command", "args", "env", "url", "headers", "type"].contains(&key.as_str()))
-    {
-        return Err("Supported fields: command, args, env, url, headers, type".into());
+    let object = value
+        .as_object()
+        .ok_or("Server entry must be a JSON object")?;
+    if object.keys().any(|key| {
+        ![
+            "command",
+            "args",
+            "env",
+            "url",
+            "serverUrl",
+            "headers",
+            "type",
+            "enabled",
+        ]
+        .contains(&key.as_str())
+    }) {
+        return Err(
+            "Supported fields: command, args, env, url, serverUrl, headers, type, enabled".into(),
+        );
     }
     if let Some(command) = value.get("command") {
         if value.get("url").is_some()
+            || value.get("serverUrl").is_some()
             || value.get("headers").is_some()
             || !command.as_str().is_some_and(|s| Path::new(s).is_absolute())
         {
@@ -161,7 +242,12 @@ fn validate_definition(value: &Value) -> Result<(), String> {
             return Err("args must be an array of strings".into());
         }
     } else {
-        let url = reqwest::Url::parse(value["url"].as_str().ok_or("Either command or url is required")?)
+        let url_value = match (value.get("url"), value.get("serverUrl")) {
+            (Some(_), Some(_)) => return Err("Use either url or serverUrl, not both".into()),
+            (Some(url), None) | (None, Some(url)) => url,
+            (None, None) => return Err("Either command, url, or serverUrl is required".into()),
+        };
+        let url = reqwest::Url::parse(url_value.as_str().ok_or("url/serverUrl must be a string")?)
             .map_err(|e| e.to_string())?;
         if !["http", "https"].contains(&url.scheme())
             || !url.username().is_empty()
@@ -175,9 +261,9 @@ fn validate_definition(value: &Value) -> Result<(), String> {
         }
         if value
             .get("type")
-            .is_some_and(|kind| kind != "http" && kind != "sse")
+            .is_some_and(|kind| kind != "http" && kind != "sse" && kind != "remote")
         {
-            return Err("type must be http or sse".into());
+            return Err("type must be http, sse, or remote".into());
         }
     }
     for field in ["env", "headers"] {
@@ -209,12 +295,15 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
 fn replace(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let temp = path.with_file_name(format!(".sg-config-{}.tmp", uuid::Uuid::new_v4()));
     write_private(&temp, bytes)?;
-    fs::rename(&temp, path).map_err(|e| format!("{e}; the temporary file was kept at {}", temp.display()))
+    fs::rename(&temp, path)
+        .map_err(|e| format!("{e}; the temporary file was kept at {}", temp.display()))
 }
 
 #[tauri::command]
 pub fn read_mcp_config(path: String) -> Result<ConfigView, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The MCP manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The MCP manager is in a failed state")?;
     view(&config_path(&path)?, None)
 }
 
@@ -226,24 +315,29 @@ pub fn edit_mcp_config(
     action: String,
     definition: Option<Value>,
 ) -> Result<ConfigView, String> {
-    let _guard = OPERATIONS.lock().map_err(|_| "The MCP manager is in a failed state")?;
+    let _guard = OPERATIONS
+        .lock()
+        .map_err(|_| "The MCP manager is in a failed state")?;
     if name.is_empty()
         || name.len() > 64
         || !name
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || b"-_".contains(&c))
     {
-        return Err("Server name may only contain letters, digits, - or _ (1-64 characters)".into());
+        return Err(
+            "Server name may only contain letters, digits, - or _ (1-64 characters)".into(),
+        );
     }
     let path = config_path(&path)?;
     let (mut document, mut receipt, current_revision) = load(&path)?;
     if expected_revision != current_revision {
         return Err("The config changed; reload it before saving".into());
     }
+    let key = mcp_key_for(&document);
     let servers = document
         .as_object_mut()
         .unwrap()
-        .entry("mcpServers")
+        .entry(key)
         .or_insert(json!({}))
         .as_object_mut()
         .unwrap();
@@ -336,7 +430,10 @@ pub fn edit_mcp_config(
 #[tauri::command]
 pub async fn test_mcp_http(definition: Value) -> Result<Value, String> {
     validate_definition(&definition)?;
-    if definition.get("command").is_some() || definition.get("type") == Some(&json!("sse")) {
+    if definition.get("command").is_some()
+        || definition.get("serverUrl").is_some()
+        || definition.get("type") == Some(&json!("sse"))
+    {
         return Err("Live testing currently supports Streamable HTTP JSON only. This app will not run a stdio command for you, nor fake a successful connection.".into());
     }
     let client = reqwest::Client::builder()
@@ -353,7 +450,7 @@ pub async fn test_mcp_http(definition: Value) -> Result<Value, String> {
         }
     }
     let mut response = request.json(&json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{
-        "protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ScholarGateway-check","version":"1"}}}))
+        "protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ScholarGate-check","version":"1"}}}))
         .send().await.map_err(|error| error.without_url().to_string())?;
     if !response.status().is_success() {
         return Err(format!("HTTP {}", response.status()));
@@ -403,7 +500,7 @@ mod tests {
         let added = edit_mcp_config(
             path.clone(),
             before.revision.clone(),
-            "scholargateway".into(),
+            "scholargate".into(),
             "add".into(),
             Some(definition.clone()),
         )
@@ -432,16 +529,16 @@ mod tests {
         let disabled = edit_mcp_config(
             path.clone(),
             added.revision,
-            "scholargateway".into(),
+            "scholargate".into(),
             "disable".into(),
             None,
         )
         .unwrap();
-        assert!(!disabled.servers.contains_key("scholargateway"));
+        assert!(!disabled.servers.contains_key("scholargate"));
         let enabled = edit_mcp_config(
             path.clone(),
             disabled.revision,
-            "scholargateway".into(),
+            "scholargate".into(),
             "enable".into(),
             None,
         )
@@ -449,7 +546,7 @@ mod tests {
         let removed = edit_mcp_config(
             path.clone(),
             enabled.revision,
-            "scholargateway".into(),
+            "scholargate".into(),
             "remove".into(),
             None,
         )
@@ -477,6 +574,11 @@ mod tests {
             assert!(validate_definition(&definition).is_err());
         }
         assert!(validate_definition(&json!({"url":"http://localhost:8795/mcp"})).is_ok());
+        assert!(validate_definition(&json!({"serverUrl":"http://localhost:8795/sse"})).is_ok());
+        assert!(validate_definition(
+            &json!({"url":"http://localhost:8795/mcp","serverUrl":"http://localhost:8795/sse"})
+        )
+        .is_err());
         assert!(validate_definition(
             &json!({"command":std::env::current_exe().unwrap(),"args":["server.js"],"env":{"KEY":"${KEY}"}})
         )
@@ -501,7 +603,7 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
         let result = test_mcp_http(json!({"url":url})).await.unwrap();
-        assert_eq!(result["serverInfo"]["name"], "scholargateway");
+        assert_eq!(result["serverInfo"]["name"], "scholargate");
         assert!(test_mcp_http(json!({"command":"/usr/bin/node"}))
             .await
             .is_err());
