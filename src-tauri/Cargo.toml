@@ -1,6 +1,6 @@
 [package]
 name = "scholargate"
-version = "1.0.2"
+version = "1.0.3"
 description = "Native Desktop App & Localhost Gateway for Academic Research"
 authors = ["Phong Dang"]
 edition = "2021"
