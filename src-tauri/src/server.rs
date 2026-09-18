@@ -1319,6 +1319,7 @@ async fn download_handler(
                 success: false,
                 local_path: None,
                 file_size_bytes: None,
+                blocked: false,
                 error: Some(error),
             })
         }
@@ -1345,15 +1346,33 @@ async fn download_handler(
     let file_name = format!("{}_{}.pdf", title, &url_hash[..8]);
     let target_file = download_dir.join(&file_name);
 
-    match reqwest::get(&payload.pdf_url).await {
+    // `reqwest::get` sends no user agent and has no timeout, and publishers
+    // routinely answer an anonymous request with 403 — every PDF from Europe
+    // PMC failed that way. Use the same identity the searches use, honour the
+    // configured proxy, and allow far longer than a search: a PDF is a file,
+    // not a metadata call.
+    let downloader = crate::engine::pooled_client(120, crate::config::outbound_proxy(&state.db).as_deref());
+    match downloader.get(&payload.pdf_url).send().await {
         Ok(resp) => {
             let status = resp.status();
             if !status.is_success() {
+                // Publishers put bot protection in front of many PDF links, so
+                // this is a routine outcome rather than a fault: say so, and let
+                // the caller offer the article page instead of a dead end.
+                let blocked = matches!(status.as_u16(), 401 | 402 | 403 | 429 | 451);
                 return Json(DownloadResponse {
                     success: false,
                     local_path: None,
                     file_size_bytes: None,
-                    error: Some(format!("Source returned HTTP {}", status.as_u16())),
+                    blocked,
+                    error: Some(if blocked {
+                        format!(
+                            "The publisher blocked this download (HTTP {}). Open the article page to read it there.",
+                            status.as_u16()
+                        )
+                    } else {
+                        format!("Source returned HTTP {}", status.as_u16())
+                    }),
                 });
             }
 
@@ -1378,6 +1397,7 @@ async fn download_handler(
                         success: false,
                         local_path: None,
                         file_size_bytes: None,
+                        blocked: false,
                         error: Some(format!("Full text could not be downloaded: {}", detail)),
                     });
                 }
@@ -1406,6 +1426,7 @@ async fn download_handler(
                         success: true,
                         local_path: Some(target_file.to_string_lossy().to_string()),
                         file_size_bytes: Some(file_size),
+                        blocked: false,
                         error: None,
                     });
                 }
@@ -1416,6 +1437,7 @@ async fn download_handler(
                 success: false,
                 local_path: None,
                 file_size_bytes: None,
+                blocked: false,
                 error: Some(e.to_string()),
             });
         }
@@ -1425,6 +1447,7 @@ async fn download_handler(
         success: false,
         local_path: None,
         file_size_bytes: None,
+        blocked: false,
         error: Some("Failed to write PDF to disk".to_string()),
     })
 }

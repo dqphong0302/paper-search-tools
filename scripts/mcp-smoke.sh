@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MCP smoke test against a running ScholarGateway gateway (Streamable HTTP).
+# MCP smoke test against a running ScholarGate gateway (Streamable HTTP).
 #
 # Usage:
 #   scripts/mcp-smoke.sh [BASE_URL] [TOKEN]

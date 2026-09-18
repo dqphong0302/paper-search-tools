@@ -98,6 +98,16 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
     }
   };
 
+  // Read the real folder off the records rather than printing a fixed path:
+  // the directory is configurable, and an install that predates the rename
+  // keeps using its old folder, so a hardcoded default would be wrong twice.
+  const storageFolder = React.useMemo(() => {
+    const path = downloads[0]?.local_path;
+    if (!path) return null;
+    const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return cut > 0 ? path.slice(0, cut) : null;
+  }, [downloads]);
+
   const handleClearAll = async () => {
     // Wording matters here: this forgets records, it does not touch the user's
     // files. The single-record delete already makes the same promise.
@@ -162,7 +172,16 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
             <span className="cockpit-badge badge-emerald">{downloads.length} Documents</span>
           </h2>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            Stored locally in <code style={{ color: 'var(--primary-cyan)', fontFamily: 'var(--font-mono)' }}>~/Documents/ScholarGate/Papers</code>
+            {storageFolder ? (
+              <>
+                Stored locally in{' '}
+                <code style={{ color: 'var(--primary-cyan)', fontFamily: 'var(--font-mono)' }}>
+                  {storageFolder}
+                </code>
+              </>
+            ) : (
+              'Downloaded PDFs are stored in the folder set under Settings → Gateway & Security.'
+            )}
           </p>
         </div>
 

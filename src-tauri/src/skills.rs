@@ -13,6 +13,18 @@ const MARKER: &str = ".scholargate-install.json";
 /// recognising — and so stop managing or updating — its own installs.
 const LEGACY_MARKER: &str = ".scholargateway-install.json";
 const DISABLED: &str = "SKILL.md.disabled";
+
+/// Removes the pre-rename receipt once the current one is in place.
+///
+/// Both markers are ignored when the skill's files are hashed, so leaving the
+/// old one behind would not corrupt anything — it would just sit in the user's
+/// skill folder forever, and a later read could still pick it up.
+fn drop_legacy_marker(target: &Path) {
+    let legacy = target.join(LEGACY_MARKER);
+    if legacy.exists() {
+        let _ = fs::remove_file(legacy);
+    }
+}
 const MAX_BYTES: usize = 20 * 1024 * 1024;
 // Serialize our own install/toggle/remove operations, including concurrent IPC calls.
 static OPERATIONS: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -298,6 +310,7 @@ pub fn install_skill(source: String, target_root: String) -> Result<SkillInfo, S
             &target.join(MARKER),
             &serde_json::to_vec_pretty(&receipt).map_err(|e| e.to_string())?,
         )?;
+        drop_legacy_marker(&target);
         info(&target, &receipt, &files)
     })();
     // Preserve incomplete files for recovery rather than deleting anything on failure.
@@ -408,6 +421,7 @@ pub fn set_skill_enabled(
         let _ = fs::rename(target.join(to), target.join(from));
         return Err(format!("Could not update the receipt: {error}"));
     }
+    drop_legacy_marker(&target);
     info(&target, &receipt, &files)
 }
 

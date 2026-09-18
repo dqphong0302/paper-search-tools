@@ -216,6 +216,10 @@ pub struct DownloadResponse {
     pub success: bool,
     pub local_path: Option<String>,
     pub file_size_bytes: Option<u64>,
+    /// True when the publisher refused the fetch rather than the fetch failing.
+    /// The UI offers the article page instead of reporting a dead end.
+    #[serde(default)]
+    pub blocked: bool,
     pub error: Option<String>,
 }
 

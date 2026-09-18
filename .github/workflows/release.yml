@@ -56,9 +56,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: ScholarGateway ${{ github.ref_name }}
+          releaseName: ScholarGate ${{ github.ref_name }}
           releaseBody: |
-            ScholarGateway Desktop with the new application icon and branding.
+            ScholarGate Desktop with the new application icon and branding.
 
             Downloads: macOS Apple Silicon (aarch64), macOS Intel (x64), and Windows x64 (.exe or .msi).
 

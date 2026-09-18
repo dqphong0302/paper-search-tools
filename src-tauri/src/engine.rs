@@ -228,7 +228,7 @@ static CLIENT_POOL: std::sync::OnceLock<
     std::sync::Mutex<HashMap<(u64, Option<String>), reqwest::Client>>,
 > = std::sync::OnceLock::new();
 
-fn pooled_client(seconds: u64, proxy_url: Option<&str>) -> reqwest::Client {
+pub(crate) fn pooled_client(seconds: u64, proxy_url: Option<&str>) -> reqwest::Client {
     let key = (seconds, proxy_url.map(str::to_string));
     let pool = CLIENT_POOL.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
     let mut pool = pool.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -246,6 +246,31 @@ fn pooled_client(seconds: u64, proxy_url: Option<&str>) -> reqwest::Client {
     let client = builder.build().unwrap_or_default();
     pool.insert(key, client.clone());
     client
+}
+
+/// Strips markup a source left in its text.
+///
+/// Europe PMC returns structured abstracts with `<h4>Background</h4>` section
+/// headings, which reached the UI verbatim. Sanitising here rather than in each
+/// fetcher means no source — present or future — can leak markup into a result.
+///
+/// The guard matters: `clean_html_text` drops everything between `<` and `>`,
+/// so running it unconditionally would eat the middle of an abstract that says
+/// "p<0.05 and n>30". Only text that really contains a tag is cleaned.
+fn strip_markup(value: &str) -> Option<String> {
+    static TAG: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let tag = TAG.get_or_init(|| regex::Regex::new(r"</?[a-zA-Z][^>]*>").unwrap());
+    tag.is_match(value)
+        .then(|| sources::clean_html_text(value))
+}
+
+fn normalize_paper_text(paper: &mut Paper) {
+    if let Some(cleaned) = strip_markup(&paper.title) {
+        paper.title = cleaned;
+    }
+    if let Some(cleaned) = paper.abstract_text.as_deref().and_then(strip_markup) {
+        paper.abstract_text = Some(cleaned);
+    }
 }
 
 /// Turns one source's outcome into the row the caller sees.
@@ -270,7 +295,10 @@ fn classify_source_outcome(
     };
     match outcome {
         None => (None, base(false, true, 0, None, false)),
-        Some(Ok(papers)) => {
+        Some(Ok(mut papers)) => {
+            for paper in &mut papers {
+                normalize_paper_text(paper);
+            }
             let status = base(true, true, papers.len(), None, false);
             let papers = (!papers.is_empty()).then_some(papers);
             (papers, status)
@@ -1541,11 +1569,16 @@ impl AcademicEngine {
                                 .flatten()
                         })
                     });
+                // Europe PMC separates "open access" from "free to read on our
+                // site". Treating any free PDF link as open access put an OPEN
+                // ACCESS badge on subscription articles whose PDF link is behind
+                // bot protection and cannot be fetched at all. The link is still
+                // worth keeping — it opens in a browser — but the badge has to
+                // report what the source actually says.
                 let is_open_access = item
                     .get("isOpenAccess")
                     .and_then(|value| value.as_str())
-                    .is_some_and(|value| value == "Y")
-                    || pdf_url.is_some();
+                    .is_some_and(|value| value == "Y");
 
                 papers.push(Paper {
                     id: format!("epmc:{}:{}", source_id, external_id),
@@ -2270,6 +2303,35 @@ mod tests {
     /// Two sources behind one upstream rate limit must queue behind one gate.
     /// Every NCBI E-utilities endpoint counts against the same per-IP budget,
     /// so spacing them individually would still have exceeded it.
+    /// Europe PMC returns structured abstracts whose section headings are HTML,
+    /// and they reached the UI as literal `<h4>Background</h4>` text.
+    #[test]
+    fn markup_from_a_source_never_reaches_a_result() {
+        let mut paper = paper("europe_pmc", "10.1/x");
+        paper.title = "CRISPR <i>in vivo</i> editing".into();
+        paper.abstract_text = Some("<h4>Background</h4>Hereditary angioedema is rare.".into());
+        normalize_paper_text(&mut paper);
+        assert_eq!(paper.title, "CRISPR in vivo editing");
+        assert_eq!(
+            paper.abstract_text.as_deref(),
+            Some("BackgroundHereditary angioedema is rare.")
+        );
+    }
+
+    /// Stripping everything between angle brackets would eat the middle of an
+    /// abstract that states an inequality, so text without a real tag is left
+    /// exactly as the source sent it.
+    #[test]
+    fn inequalities_are_not_mistaken_for_markup() {
+        let mut paper = paper("pubmed", "10.1/y");
+        let stats = "Mortality fell (p<0.05, n>300) across both arms.";
+        paper.abstract_text = Some(stats.into());
+        paper.title = "Outcome at p<0.05".into();
+        normalize_paper_text(&mut paper);
+        assert_eq!(paper.abstract_text.as_deref(), Some(stats));
+        assert_eq!(paper.title, "Outcome at p<0.05");
+    }
+
     #[test]
     fn sources_sharing_an_upstream_limit_share_one_gate() {
         let ncbi: Vec<_> = registry::drivers()

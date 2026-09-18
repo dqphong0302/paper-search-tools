@@ -23,7 +23,7 @@ pub const SERVER_NAME: &str = "scholargate";
 pub const LEGACY_SERVER_NAME: &str = "scholargateway";
 /// Environment variable Codex reads the gateway token from. Codex only accepts a
 /// variable name, never a literal token, so the secret stays out of the file.
-pub const CODEX_TOKEN_ENV: &str = "SCHOLARGATEWAY_TOKEN";
+pub const CODEX_TOKEN_ENV: &str = "SCHOLARGATE_TOKEN";
 
 const BUNDLED_SKILLS: [(&str, &str); 3] = [
     ("paper-search", "builtin:paper-search"),
@@ -599,12 +599,20 @@ pub fn remove_mcp(id: &str, port: u16) -> Result<ClientStatus, String> {
 
 fn remove_mcp_for(profile: &Profile, port: u16) -> Result<ClientStatus, String> {
     let path = real_path(&profile.mcp);
+    // Removal has to cover the pre-rename entry as well. A client wired up by an
+    // older build carries the name this app used then, so looking only for the
+    // current one would refuse to uninstall — and leave the stale entry pointing
+    // at a gateway the user is trying to disconnect.
     if profile.toml {
         let mut document = read_toml(&path)?;
         let removed = document
             .get_mut("mcp_servers")
             .and_then(|item| item.as_table_like_mut())
-            .map(|servers| servers.remove(SERVER_NAME).is_some())
+            .map(|servers| {
+                let current = servers.remove(SERVER_NAME).is_some();
+                let legacy = servers.remove(LEGACY_SERVER_NAME).is_some();
+                current || legacy
+            })
             .unwrap_or(false);
         if !removed {
             return Err(format!(
@@ -614,20 +622,28 @@ fn remove_mcp_for(profile: &Profile, port: u16) -> Result<ClientStatus, String> 
         }
         write_toml(&path, &document)?;
     } else {
-        let view = crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())?;
-        if !view.managed.contains_key(SERVER_NAME) {
+        let mut view = crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())?;
+        let names: Vec<&str> = [SERVER_NAME, LEGACY_SERVER_NAME]
+            .into_iter()
+            .filter(|name| view.managed.contains_key(*name))
+            .collect();
+        if names.is_empty() {
             return Err(
                 "Only the entry this app installed can be removed from here; edit the client config yourself for anything else."
                     .to_string(),
             );
         }
-        crate::integrations::edit_mcp_config(
-            path.to_string_lossy().into_owned(),
-            view.revision,
-            SERVER_NAME.to_string(),
-            "remove".to_string(),
-            None,
-        )?;
+        for name in names {
+            crate::integrations::edit_mcp_config(
+                path.to_string_lossy().into_owned(),
+                view.revision.clone(),
+                name.to_string(),
+                "remove".to_string(),
+                None,
+            )?;
+            // Each edit bumps the revision, so re-read before the next one.
+            view = crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())?;
+        }
     }
     Ok(status(profile, port))
 }
@@ -774,6 +790,53 @@ mod tests {
         )
         .unwrap();
         home
+    }
+
+    /// Uninstall has to work for clients wired up before the rename. Removal
+    /// looked only for the current entry name, so a config written by an older
+    /// build answered "no entry to remove" and kept pointing at the gateway the
+    /// user was trying to disconnect.
+    #[test]
+    fn a_client_wired_up_before_the_rename_can_still_be_unwired() {
+        let home = fake_home();
+        let profiles = profiles_in(&home);
+
+        // JSON client (Claude Desktop): entry written under the old name, and
+        // recorded as managed by this app.
+        let claude = find(&profiles, "claude_desktop").unwrap();
+        let path = claude_desktop_dir(&home).join("claude_desktop_config.json");
+        crate::integrations::edit_mcp_config(
+            path.to_string_lossy().into_owned(),
+            crate::integrations::read_mcp_config(path.to_string_lossy().into_owned())
+                .unwrap()
+                .revision,
+            LEGACY_SERVER_NAME.to_string(),
+            "add".to_string(),
+            Some(claude_definition(8795, None)),
+        )
+        .unwrap();
+        let removed = remove_mcp_for(&claude, 8795).unwrap();
+        assert!(!removed.mcp_installed, "the pre-rename entry survived removal");
+        let document: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert!(document["mcpServers"].get(LEGACY_SERVER_NAME).is_none());
+
+        // TOML client (Codex): same situation in the other config format.
+        let codex = find(&profiles, "codex").unwrap();
+        let codex_path = real_path(&codex.mcp);
+        fs::create_dir_all(codex_path.parent().unwrap()).unwrap();
+        fs::write(
+            &codex_path,
+            format!(
+                "model = \"gpt-5\"\n\n[mcp_servers.{LEGACY_SERVER_NAME}]\nurl = \"{}\"\n",
+                gateway_url(8795)
+            ),
+        )
+        .unwrap();
+        remove_mcp_for(&codex, 8795).unwrap();
+        let written = fs::read_to_string(&codex_path).unwrap();
+        assert!(!written.contains(LEGACY_SERVER_NAME), "{written}");
+        // Unrelated configuration is untouched.
+        assert!(written.contains("model = \"gpt-5\""));
     }
 
     #[test]
@@ -1041,6 +1104,13 @@ mod tests {
 
         let after = install_skills_for(&claude, 8795).unwrap();
         assert!(after.skills.iter().all(|item| item.up_to_date));
+        // The pre-rename receipt must not survive the update, or every skill
+        // folder installed by an older build keeps a dead file forever.
+        assert!(
+            !skill.join(".scholargateway-install.json").exists(),
+            "the pre-rename marker was left behind"
+        );
+        assert!(skill.join(".scholargate-install.json").exists());
         assert_eq!(
             fs::read_to_string(skill.join("SKILL.md")).unwrap(),
             crate::skills::preview_skill("builtin:paper-search".into())

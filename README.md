@@ -112,7 +112,7 @@ Streamable HTTP endpoint: `http://127.0.0.1:8795/mcp` (add the header only if a 
 }
 ```
 
-Codex uses `[mcp_servers.scholargate]` with the same `/mcp` URL and `bearer_token_env_var = "SCHOLARGATEWAY_TOKEN"`. Antigravity uses its documented SSE shape instead: `{ "serverUrl": "http://127.0.0.1:8795/sse" }`. Drop `headers` when no token is set.
+Codex uses `[mcp_servers.scholargate]` with the same `/mcp` URL and `bearer_token_env_var = "SCHOLARGATE_TOKEN"`. Antigravity uses its documented SSE shape instead: `{ "serverUrl": "http://127.0.0.1:8795/sse" }`. Drop `headers` when no token is set.
 
 **The 8 MCP tools:**
 
@@ -201,7 +201,7 @@ The app detects the clients installed on this machine and reports, per client, w
 
 - Install writes one entry named `scholargate` pointing at `http://127.0.0.1:<port>/mcp`, after backing up the previous file. Nothing else in the file is touched: the TOML editor preserves comments and formatting, and the JSON editor keeps every other key.
 - A symlinked config (Antigravity ships one) is resolved to the real file, and the resolved path is what the panel displays.
-- If a gateway token is set, the JSON clients receive an `Authorization` header — a plaintext file then contains the token, which the panel says. Codex only accepts an environment variable name, so it receives `bearer_token_env_var = "SCHOLARGATEWAY_TOKEN"` and the token stays out of the file; export that variable before starting Codex.
+- If a gateway token is set, the JSON clients receive an `Authorization` header — a plaintext file then contains the token, which the panel says. Codex only accepts an environment variable name, so it receives `bearer_token_env_var = "SCHOLARGATE_TOKEN"` and the token stays out of the file; export that variable before starting Codex.
 - An entry the app did not create is reported but never overwritten or removed, whatever it is called.
 - Installing skills copies the three bundled skills; each one it did not install is left alone, and removal moves folders to a recoverable archive rather than deleting them.
 

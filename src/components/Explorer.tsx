@@ -5,6 +5,7 @@ import {
   Sparkles,
   AlertTriangle,
   Compass,
+  ExternalLink,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -157,7 +158,9 @@ export const Explorer: React.FC<ExplorerProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadSuccessId, setDownloadSuccessId] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  // A blocked download is not a dead end, so the banner carries the article it
+  // failed on and offers its page.
+  const [downloadError, setDownloadError] = useState<{ message: string; paper?: Paper } | null>(null);
   const [oaOnly, setOaOnly] = useState(false);
   const [recommendedPdfOnly, setRecommendedPdfOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('relevance');
@@ -482,13 +485,18 @@ export const Explorer: React.FC<ExplorerProps> = ({
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || (json && json.success === false)) {
-        throw new Error(json?.error || `The gateway returned status ${res.status}`);
+        setDownloadError({
+          message: json?.error || `The gateway returned status ${res.status}`,
+          paper,
+        });
+        setTimeout(() => setDownloadError(null), 12000);
+        return;
       }
       setDownloadSuccessId(paper.id);
       setTimeout(() => setDownloadSuccessId(null), 3000);
     } catch (err) {
-      setDownloadError(`PDF download failed: ${(err as Error).message}`);
-      setTimeout(() => setDownloadError(null), 6000);
+      setDownloadError({ message: `PDF download failed: ${(err as Error).message}`, paper });
+      setTimeout(() => setDownloadError(null), 12000);
     } finally {
       setDownloadingId(null);
     }
@@ -1051,7 +1059,21 @@ export const Explorer: React.FC<ExplorerProps> = ({
       {downloadError && (
         <div className="alert alert-warning">
           <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-          <div>{downloadError}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span>{downloadError.message}</span>
+            {downloadError.paper && originalPaperUrl(downloadError.paper) && (
+              <a
+                className="action-btn"
+                href={originalPaperUrl(downloadError.paper)!}
+                target="_blank"
+                rel="noreferrer"
+                style={{ textDecoration: 'none' }}
+              >
+                <ExternalLink size={13} />
+                <span>Open the article page</span>
+              </a>
+            )}
+          </div>
         </div>
       )}
 
