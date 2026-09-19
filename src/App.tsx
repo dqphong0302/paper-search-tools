@@ -46,10 +46,16 @@ export const App: React.FC = () => {
           const update = await check({ timeout: 30_000 });
           if (!update) return;
 
+          if (localStorage.getItem('scholargate_update_later') === update.version) {
+            await update.close();
+            return;
+          }
+
           accepted = window.confirm(
             `ScholarGate ${update.version} is available. Download and install it now?`
           );
           if (!accepted) {
+            localStorage.setItem('scholargate_update_later', update.version);
             await update.close();
             return;
           }

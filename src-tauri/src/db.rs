@@ -1323,6 +1323,31 @@ impl Database {
         list
     }
 
+    pub fn get_download_record(&self, id: &str) -> Option<DownloadRecord> {
+        self.conn()
+            .query_row(
+                "SELECT id,paper_id,title,pdf_url,local_path,file_size_bytes,source,year,downloaded_at,workspace_id FROM download_history WHERE id=?1",
+                params![id],
+                |row| {
+                    Ok(DownloadRecord {
+                        id: row.get(0)?,
+                        paper_id: row.get(1)?,
+                        title: row.get(2)?,
+                        pdf_url: row.get(3)?,
+                        local_path: row.get(4)?,
+                        file_size_bytes: row.get(5)?,
+                        source: row.get(6)?,
+                        year: row.get(7)?,
+                        downloaded_at: row.get(8)?,
+                        workspace_id: row.get(9)?,
+                    })
+                },
+            )
+            .optional()
+            .ok()
+            .flatten()
+    }
+
     pub fn delete_download_record(&self, id: &str) -> Result<()> {
         let conn = self.conn();
         conn.execute("DELETE FROM download_history WHERE id = ?1", params![id])?;

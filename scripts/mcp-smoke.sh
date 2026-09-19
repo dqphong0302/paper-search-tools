@@ -11,18 +11,16 @@ set -euo pipefail
 BASE="${1:-http://127.0.0.1:8795}"
 TOKEN="${2:-}"
 
-AUTH=()
-if [ -n "$TOKEN" ]; then
-  AUTH=(-H "Authorization: Bearer ${TOKEN}")
-fi
-
 call() {
   local body="$1"
-  curl -sS "${AUTH[@]}" \
-    -H 'content-type: application/json' \
-    -H 'accept: application/json' \
-    -d "${body}" \
-    "${BASE}/mcp"
+  if [ -n "$TOKEN" ]; then
+    curl -sS -H "Authorization: Bearer ${TOKEN}" \
+      -H 'content-type: application/json' -H 'accept: application/json' \
+      -d "${body}" "${BASE}/mcp"
+  else
+    curl -sS -H 'content-type: application/json' -H 'accept: application/json' \
+      -d "${body}" "${BASE}/mcp"
+  fi
   printf '\n'
 }
 

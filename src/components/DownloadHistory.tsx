@@ -14,6 +14,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { gatewayFetch } from '../lib/gateway';
+import { PdfReaderModal } from './PdfReaderModal';
 
 export interface DownloadRecord {
   id: string;
@@ -40,6 +41,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openSuccessId, setOpenSuccessId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [readerDocument, setReaderDocument] = useState<DownloadRecord | null>(null);
 
   const fetchDownloads = async () => {
     setLoading(true);
@@ -377,7 +379,17 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
               {/* Actions */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                 <button
+                  id={`read-pdf-${item.id}`}
                   className="action-btn action-btn-primary"
+                  onClick={() => setReaderDocument(item)}
+                  title="Read, search and extract this PDF inside ScholarGate"
+                  style={{ padding: '7px 14px' }}
+                >
+                  <FileText size={14} />
+                  <span>Read & Extract</span>
+                </button>
+                <button
+                  className="action-btn"
                   onClick={() => handleOpenFile(item.id, item.local_path)}
                   title="Open PDF file with default system application"
                   style={{ padding: '7px 14px' }}
@@ -409,6 +421,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
           ))}
         </div>
       )}
+      <PdfReaderModal document={readerDocument} onClose={() => setReaderDocument(null)} />
     </div>
   );
 };

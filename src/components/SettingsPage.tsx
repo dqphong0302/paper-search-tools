@@ -37,6 +37,8 @@ import { AiClients } from './AiClients';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { gatewayFetch, setGatewayToken } from '../lib/gateway';
 import { readSettings, saveSettings } from '../lib/settings';
+import { BackupRestore } from './BackupRestore';
+import { UpdateCenter } from './UpdateCenter';
 
 interface SettingsPageProps {
   port: number;
@@ -1416,6 +1418,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
               <Trash2 size={14} />
               <span>{clearCacheSuccess ? 'Cache Cleared!' : 'Clear Search Cache'}</span>
             </button>
+          </Card>
+
+          <Card title="Backup & Restore" subtitle="Portable local backup of research data" icon={<Database size={16} style={{ color: 'var(--primary-cyan)' }} />}>
+            <BackupRestore />
+          </Card>
+
+          <Card title="Update Center" subtitle="Signed automatic updates from the public stable release channel" icon={<RefreshCw size={16} style={{ color: 'var(--status-emerald)' }} />}>
+            <UpdateCenter />
           </Card>
         </div>
       )}

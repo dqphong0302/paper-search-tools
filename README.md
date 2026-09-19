@@ -23,6 +23,8 @@ ScholarGate combines two jobs in one fully local app (macOS/Windows/Linux — no
 ### Per-project research workspaces
 - Create/rename/delete **workspaces**; each saved paper carries a **note**, **reading status** (unread/reading/read), **favourite** flag and **tags**; one paper can belong to several workspaces.
 - Search queries (which can be **saved**) and downloaded PDFs are recorded per workspace; review the whole project in the **Library** tab.
+- Downloaded papers open in a built-in **PDF reader** with page navigation, zoom, local full-text extraction, search, copy and Markdown export. Files never leave the machine; image-only scans are reported as requiring OCR.
+- **Portable backup and restore** preserves workspaces, papers, notes, tags, reading state and history without exporting API keys, tokens, agent credentials, cache or PDF binaries.
 - **Hand-off to an agent**: copy the `workspace_id` plus instructions; the agent reads the whole project through the MCP `get_workspace` tool and keeps searching with the same `workspace_id`.
 - The default workspace adopts any papers saved before workspaces existed.
 
@@ -54,7 +56,7 @@ scripts/mcp-smoke.sh http://127.0.0.1:8795 "$MCP_AUTH_TOKEN"   # curl smoke test
 pnpm mcp:check "http://127.0.0.1:8795/mcp" "$MCP_AUTH_TOKEN"   # official MCP SDK
 ```
 
-CI: `.github/workflows/ci.yml` runs the frontend (build + test) on Ubuntu and `cargo test` on macOS. Secrets use the OS keychain; set `SCHOLARGATE_KEYCHAIN=0` to disable it.
+CI validates the frontend and Rust backend on macOS and Windows. Tagged releases build signed updater artifacts for macOS (Apple Silicon/Intel), Windows x64 and Linux x64, publish SHA-256 checksums, and expose an in-app **Update Center**. OS publisher signing/notarization is applied when its certificate secrets are configured. Secrets use the OS keychain; set `SCHOLARGATE_KEYCHAIN=0` to disable it.
 
 ---
 
@@ -67,7 +69,7 @@ The interface is **English throughout**, including preset and source-group names
 | **Search** | **Academic Papers / Academic Web** toggle. An overview landing page before the first query; Explorer once there are results (filter by source, year, OA, sort, download PDFs, save to a workspace, "Load more"). Results sit directly under the filter bar; the two analysis panels (**Document Overview**, **Sample Audit & Landscape**) sit **below** the list and are collapsed by default. |
 | **Library** | Papers in the workspace (with notes, tags, reading status, .RIS export), downloaded PDFs, queries, and the research tools. |
 | **Connections** | Per-workspace agent access; MCP & skills; gateway activity. |
-| **Settings** | Four groups: **Search Sources** (presets, enable/disable, credential readiness, per-source health checks), **Connections & Keys** (LLM providers, source credentials, MetaSearch/SearXNG), **AI Clients** (install MCP + skills into Claude, Codex, Antigravity), **Gateway & Security** (token, port, rate limit, timeout, cache, download directory). |
+| **Settings** | Four groups: **Search Sources** (presets, enable/disable, credential readiness, per-source health checks), **Connections & Keys** (LLM providers, source credentials, MetaSearch/SearXNG), **AI Clients** (install MCP + skills into Claude, Codex, Antigravity), **Gateway & Security** (token, port, rate limit, timeout, cache, download directory, Update Center, backup/restore). |
 
 Pick the workspace in the **top bar** (dropdown plus a `+` button). Every saved paper and query belongs to the selected workspace.
 
@@ -163,6 +165,7 @@ The gateway binds loopback only; Origin is restricted to the Vite UI (1420), Tau
 | `GET` | `/api/paper/{id}/citations?direction=references\|cited_by\|related&limit=` | Citation graph and related papers via OpenAlex (ID in the path) |
 | `GET` | `/api/citations?id=…&direction=…&limit=` | The same, as a query (for OpenAlex IDs containing `/`) |
 | `POST` | `/api/download` | Download a PDF into the download directory |
+| `GET` | `/api/downloads/{id}/content` | Read a recorded local PDF in the built-in reader |
 | `GET` | `/api/telemetry` | Statistics and the query log |
 | `GET` | `/api/trends?geo=VN` | Google Trends RSS (VN/US/GB/SG/AU) |
 | `GET` / `DELETE` | `/api/history/searches` | Read/clear history by `?workspace_id=`; omit it to apply to every workspace |

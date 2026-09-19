@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agents;
+mod backup;
 mod catalog;
 mod citations;
 mod clients;
@@ -30,7 +31,7 @@ use tauri::{
 
 // The desktop UI talks to the gateway over HTTP/REST; Tauri IPC is only used for
 // the operations that must run in-process (settings, credentials, files, skills).
-struct AppSharedState {
+pub(crate) struct AppSharedState {
     pub db: Database,
     pub port: u16,
 }
@@ -420,6 +421,8 @@ fn main() {
             read_settings,
             save_settings,
             choose_download_directory,
+            backup::export_backup,
+            backup::restore_backup,
             skills::preview_skill,
             skills::install_skill,
             skills::list_skills,

@@ -7,8 +7,10 @@ use crate::models::{
     WorkspacePaperRequest,
 };
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    response::Response,
     routing::{delete, get, patch, post},
     Json, Router,
 };
@@ -166,6 +168,7 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
         .route("/api/paper/{id}/citations", get(citations_handler))
         .route("/api/citations", get(citations_query_handler))
         .route("/api/download", post(download_handler))
+        .route("/api/downloads/{id}/content", get(download_content_handler))
         .route("/api/telemetry", get(telemetry_handler))
         .route("/api/trends", get(trends_handler))
         .route(
@@ -266,7 +269,7 @@ async fn health_handler(State(state): State<AppState>) -> Json<serde_json::Value
         "service": "ScholarGate Desktop",
         "port": state.port,
         "mode": "standalone_local",
-        "version": "1.0.0"
+        "version": env!("CARGO_PKG_VERSION")
     }))
 }
 
@@ -479,6 +482,62 @@ mod search_settings_tests {
             "\"Heart Failure\" therapy"
         );
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn downloaded_pdf_content_is_served_only_from_recorded_history() {
+        let path = std::env::temp_dir().join(format!(
+            "scholargate-pdf-content-{}.pdf",
+            uuid::Uuid::new_v4()
+        ));
+        let fixture = b"%PDF-1.4\nScholarGate PDF fixture\n%%EOF";
+        tokio::fs::write(&path, fixture).await.unwrap();
+
+        let db = Database::in_memory().unwrap();
+        db.add_download_record(&DownloadRecord {
+            id: "download-1".into(),
+            paper_id: "paper-1".into(),
+            title: "Recorded paper".into(),
+            pdf_url: "https://example.org/paper.pdf".into(),
+            local_path: path.to_string_lossy().into_owned(),
+            file_size_bytes: fixture.len() as u64,
+            source: Some("fixture".into()),
+            year: Some(2026),
+            downloaded_at: 1,
+            workspace_id: None,
+        });
+        let state = AppState {
+            db,
+            engine: Arc::new(AcademicEngine::new()),
+            port: 0,
+            mcp_sessions: Default::default(),
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server =
+            tokio::spawn(
+                async move { axum::serve(listener, gateway_router(state)).await.unwrap() },
+            );
+
+        let response = reqwest::get(format!("{base}/api/downloads/download-1/content"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        assert_eq!(
+            response.headers()[reqwest::header::CONTENT_TYPE],
+            "application/pdf"
+        );
+        assert_eq!(response.bytes().await.unwrap().as_ref(), fixture);
+        assert_eq!(
+            reqwest::get(format!("{base}/api/downloads/not-recorded/content"))
+                .await
+                .unwrap()
+                .status(),
+            reqwest::StatusCode::NOT_FOUND
+        );
+
+        server.abort();
+        tokio::fs::remove_file(path).await.unwrap();
     }
 
     #[tokio::test]
@@ -1450,6 +1509,47 @@ async fn download_handler(
         blocked: false,
         error: Some("Failed to write PDF to disk".to_string()),
     })
+}
+
+/// Streams only files recorded by ScholarGate, never an arbitrary caller-supplied path.
+async fn download_content_handler(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Response, StatusCode> {
+    let record = state
+        .db
+        .get_download_record(&id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let bytes = tokio::fs::read(&record.local_path)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    if !bytes.starts_with(b"%PDF") {
+        return Err(StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+    let file_name: String = record
+        .title
+        .chars()
+        .map(|character| {
+            if character.is_alphanumeric() || matches!(character, ' ' | '-' | '_') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .take(80)
+        .collect();
+    let disposition = format!("inline; filename=\"{}.pdf\"", file_name.trim());
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/pdf")
+        .header(header::CACHE_CONTROL, "private, no-store")
+        .header(
+            header::CONTENT_DISPOSITION,
+            HeaderValue::from_str(&disposition)
+                .unwrap_or_else(|_| HeaderValue::from_static("inline")),
+        )
+        .body(Body::from(bytes))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 // Handler 5: Agent Telemetry
