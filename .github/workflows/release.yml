@@ -25,11 +25,9 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             bundles: app,dmg
-            apple_signing_identity: '-'
           - os: macos-latest
             target: x86_64-apple-darwin
             bundles: app,dmg
-            apple_signing_identity: '-'
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis,msi
@@ -38,12 +36,8 @@ jobs:
             bundles: appimage,deb
     runs-on: ${{ matrix.os }}
     env:
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_SIGNING_IDENTITY_SECRET: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-      WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' }}
+      HAS_WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -66,7 +60,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Import Apple distribution certificate
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERTIFICATE == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY_SECRET: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD_SECRET: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           CERTIFICATE_PATH="$RUNNER_TEMP/scholargate-signing.p12"
           KEYCHAIN_PATH="$RUNNER_TEMP/scholargate-signing.keychain-db"
@@ -78,8 +80,17 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           printf 'APPLE_SIGNING_IDENTITY=%s\n' "$APPLE_SIGNING_IDENTITY_SECRET" >> "$GITHUB_ENV"
+          if [ -n "$APPLE_ID_SECRET" ] && [ -n "$APPLE_PASSWORD_SECRET" ] && [ -n "$APPLE_TEAM_ID_SECRET" ]; then
+            printf 'APPLE_ID=%s\nAPPLE_PASSWORD=%s\nAPPLE_TEAM_ID=%s\n' "$APPLE_ID_SECRET" "$APPLE_PASSWORD_SECRET" "$APPLE_TEAM_ID_SECRET" >> "$GITHUB_ENV"
+          fi
+      - name: Use ad hoc macOS signing
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERTIFICATE != 'true'
+        run: echo 'APPLE_SIGNING_IDENTITY=-' >> "$GITHUB_ENV"
       - name: Import Windows code-signing certificate
-        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERTIFICATE == 'true'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         shell: pwsh
         run: |
           $certificatePath = Join-Path $env:RUNNER_TEMP 'scholargate-signing.pfx'
@@ -94,15 +105,11 @@ jobs:
         run: node -e 'const p = require("./package.json"); const t = require("./src-tauri/tauri.conf.json"); if (process.env.GITHUB_REF_NAME !== `v${p.version}` || p.version !== t.version) process.exit(1)'
       - run: pnpm test
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml --bin scholargate
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY || matrix.apple_signing_identity }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ScholarGate ${{ github.ref_name }}
