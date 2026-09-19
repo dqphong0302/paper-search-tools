@@ -56,7 +56,7 @@ scripts/mcp-smoke.sh http://127.0.0.1:8795 "$MCP_AUTH_TOKEN"   # curl smoke test
 pnpm mcp:check "http://127.0.0.1:8795/mcp" "$MCP_AUTH_TOKEN"   # official MCP SDK
 ```
 
-CI validates the frontend and Rust backend on macOS and Windows. Tagged releases build signed updater artifacts for macOS (Apple Silicon/Intel), Windows x64 and Linux x64, publish SHA-256 checksums, and expose an in-app **Update Center**. OS publisher signing/notarization is applied when its certificate secrets are configured. Secrets use the OS keychain; set `SCHOLARGATE_KEYCHAIN=0` to disable it.
+CI validates the frontend and Rust backend on macOS, Windows and Linux. Tagged releases build signed updater artifacts for macOS (Apple Silicon/Intel), Windows x64 and Linux x64, publish SHA-256 checksums, and expose an in-app **Update Center**. OS publisher signing/notarization is applied when its certificate secrets are configured. Secrets use the OS keychain; set `SCHOLARGATE_KEYCHAIN=0` to disable it.
 
 ---
 
