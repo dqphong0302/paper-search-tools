@@ -1933,3 +1933,25 @@ a.action-btn:hover {
   max-width: 100%;
   min-width: 0;
 }
+
+/* Discipline pills stay on one line and scroll sideways instead of wrapping. */
+.quick-pill-row { scrollbar-width: thin; mask-image: linear-gradient(to right, #000 88%, transparent); }
+.quick-pill-row > * { flex-shrink: 0; white-space: nowrap; }
+
+/* Keeps the export actions reachable while scrolling; the negative offset
+   cancels the scroll body's top padding so no content peeks above the bar. */
+.sticky-toolbar { position: sticky; top: -28px; z-index: 5; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06); }
+@media (max-width: 900px) { .sticky-toolbar { top: -22px; } }
+@media (max-width: 640px) { .sticky-toolbar { top: -18px; } }
+
+/* Download failures are triggered from deep in a scrolled list, so they must
+   appear where the user is looking rather than at the top of the page. */
+.floating-alert {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  max-width: min(520px, calc(100vw - 32px));
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+@media (max-width: 640px) { .floating-alert { right: 16px; bottom: 84px; } }

@@ -284,7 +284,7 @@ export const Library: React.FC<LibraryProps> = ({
       </div>
 
       {downloadError && (
-        <div className="alert alert-warning" role="alert">
+        <div className="alert alert-warning floating-alert" role="alert">
           {downloadError}
         </div>
       )}

@@ -623,15 +623,18 @@ export const Explorer: React.FC<ExplorerProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: 10,
-            flexWrap: 'wrap',
-            padding: '10px 14px',
+            flexWrap: 'nowrap',
+            padding: '8px 14px',
             background: 'var(--cockpit-card)',
             border: '1px solid var(--cockpit-border)',
             borderRadius: 'var(--radius-md)',
           }}
         >
-          {/* Quick Domain Pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
+          {/* Quick Domain Pills — one scrollable line so results start higher up */}
+          <div
+            className="quick-pill-row"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflowX: 'auto', flex: 1, minWidth: 0 }}
+          >
             <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-dim)', textTransform: 'uppercase' }}>
               Discipline:
             </span>
@@ -1038,7 +1041,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
       )}
 
       {downloadError && (
-        <div className="alert alert-warning">
+        <div className="alert alert-warning floating-alert" role="alert">
           <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span>{downloadError.message}</span>
@@ -1223,11 +1226,8 @@ export const Explorer: React.FC<ExplorerProps> = ({
             borderRadius: 'var(--radius-sm)',
             background: 'var(--cockpit-card)',
             fontSize: 12,
-            // Keep the export actions reachable while scrolling through ticked results.
-            position: 'sticky',
-            top: 0,
-            zIndex: 5,
           }}
+          className="sticky-toolbar"
         >
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
             <input
