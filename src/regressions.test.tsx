@@ -139,6 +139,21 @@ describe('topic and source availability setup', () => {
     expect(host.textContent).not.toContain('Which field are you searching in?');
   });
 
+  it('lets a first-run user skip the topic question with Auto-detect', async () => {
+    fetchMock.mockImplementation(async (url, init) => {
+      if (url === '/api/config' && init?.method !== 'POST') return response({});
+      if (url === '/api/config' && init?.method === 'POST') return response({ success: true });
+      if (url === '/api/telemetry') return response({ recent_logs: [] });
+      if (url === '/api/history/downloads' || url === '/api/library') return response([]);
+      throw new Error(`Unexpected request ${url}`);
+    });
+    await render(<App />);
+    await click('#topic-setup-skip');
+    const save = fetchMock.mock.calls.find(([url, init]) => url === '/api/config' && init?.method === 'POST');
+    expect(JSON.parse(String(save?.[1]?.body)).domain_preset).toBe('auto');
+    expect(host.textContent).not.toContain('Which field are you searching in?');
+  });
+
   it('hides every unavailable source and therefore hides unavailable-only groups', async () => {
     await render(<SourceLimiterModal isOpen onClose={() => {}} activeScope="auto" selectedSources={[]} onApplySources={() => {}} />);
     expect(host.textContent).not.toContain('MedPharmRes');

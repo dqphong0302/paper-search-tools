@@ -1,6 +1,15 @@
 import { Paper } from '../types';
+import { getPaperKind } from './paperKind';
 
 const clean = (value?: string) => (value || '').replace(/\s+/g, ' ').trim();
+
+/** "123-130" / "123–130" → ["123", "130"]; a single page or article number stays alone. */
+const pageRange = (pages?: string): [string, string?] | null => {
+  const value = clean(pages);
+  if (!value) return null;
+  const [start, end] = value.split(/\s*[-–—]+\s*/);
+  return end ? [start, end] : [start];
+};
 
 const bibtexValue = (value: string) =>
   value.replace(/[{}]/g, '').replace(/[\r\n]+/g, ' ').trim();
@@ -70,7 +79,14 @@ export function apaCitation(paper: Paper): string {
     ? `${authors.slice(0, 3).join(', ')}${authors.length > 3 ? ', et al.' : ''}`
     : 'N.d.';
   const year = paper.year ? `(${paper.year}).` : '(n.d.).';
-  const venue = paper.venue ? ` ${clean(paper.venue)}.` : '';
+  const { volume, issue, pages } = paper.biblio ?? {};
+  const locator = [
+    volume ? `${clean(volume)}${issue ? `(${clean(issue)})` : ''}` : '',
+    pages ? clean(pages).replace(/\s*-+\s*/, '–') : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const venue = paper.venue ? ` ${clean(paper.venue)}${locator ? `, ${locator}` : ''}.` : '';
   const doi = paper.doi ? ` https://doi.org/${paper.doi}` : paper.source_url ? ` ${paper.source_url}` : '';
   return `${authorText} ${year} ${clean(paper.title)}.${venue}${doi}`.replace(/\s+/g, ' ').trim();
 }
@@ -84,7 +100,10 @@ export function vancouverCitation(paper: Paper): string {
     ? `${authors.join(', ')}${paper.authors.length > 6 ? ', et al' : ''}.`
     : '';
   const venue = paper.venue ? ` ${clean(paper.venue)}.` : '';
-  const year = paper.year ? ` ${paper.year}` : '';
+  const { volume, issue, pages } = paper.biblio ?? {};
+  const year = paper.year
+    ? ` ${paper.year}${volume ? `;${clean(volume)}` : ''}${volume && issue ? `(${clean(issue)})` : ''}${pages ? `:${clean(pages)}` : ''}`
+    : '';
   const locator = paper.doi ? ` doi:${paper.doi}` : paper.source_url ? ` ${paper.source_url}` : '';
   return `${authorText} ${clean(paper.title)}.${venue}${year}.${locator}`.replace(/\s+/g, ' ').trim();
 }
@@ -96,26 +115,45 @@ export function bibtexKey(paper: Paper): string {
   return slug || 'paper';
 }
 
-export function bibtexCitation(paper: Paper, key = bibtexKey(paper)): string {
-  const lines = [`@article{${key},`];
-  lines.push(`  title = {${bibtexValue(clean(paper.title))}},`);
-  if (paper.authors.length) {
-    lines.push(`  author = {${bibtexValue(paper.authors.join(' and '))}},`);
-  }
-  if (paper.year) lines.push(`  year = {${paper.year}},`);
-  if (paper.venue) lines.push(`  journal = {${bibtexValue(clean(paper.venue))}},`);
-  if (paper.doi) lines.push(`  doi = {${paper.doi}},`);
-  if (paper.source_url) lines.push(`  url = {${paper.source_url}},`);
-  lines.push('}');
-  return lines.join('\n');
-}
-
 /** RIS wants "Family, Given"; a raw "John Smith" is read as a single-field name. */
 const risAuthor = (author: string): string => {
   const { family, given } = familyGiven(author);
   if (!family) return bibtexValue(clean(author));
   return bibtexValue(given ? `${family}, ${given}` : family);
 };
+
+/** Non-article records (datasets, reports, …) must not be imported as journal articles. */
+const RIS_TYPE: Record<string, string> = { dataset: 'DATA', report: 'RPRT', software: 'COMP' };
+const BIBTEX_TYPE: Record<string, string> = { article: 'article', report: 'techreport' };
+
+export function bibtexCitation(paper: Paper, key = bibtexKey(paper)): string {
+  const kind = getPaperKind(paper);
+  const type = BIBTEX_TYPE[kind] ?? 'misc';
+  const lines = [`@${type}{${key},`];
+  lines.push(`  title = {${bibtexValue(clean(paper.title))}},`);
+  if (paper.authors.length) {
+    // "Family, Given" so BibTeX readers don't swap PubMed-style "Bhat AI".
+    lines.push(`  author = {${paper.authors.map(risAuthor).join(' and ')}},`);
+  }
+  if (paper.year) lines.push(`  year = {${paper.year}},`);
+  if (paper.venue) {
+    const field = type === 'article' ? 'journal' : type === 'techreport' ? 'institution' : 'howpublished';
+    lines.push(`  ${field} = {${bibtexValue(clean(paper.venue))}},`);
+  }
+  const biblio = paper.biblio ?? {};
+  if (biblio.volume) lines.push(`  volume = {${bibtexValue(biblio.volume)}},`);
+  if (biblio.issue) lines.push(`  number = {${bibtexValue(biblio.issue)}},`);
+  const pages = pageRange(biblio.pages);
+  if (pages) lines.push(`  pages = {${bibtexValue(pages.filter(Boolean).join('--'))}},`);
+  if (biblio.publisher) lines.push(`  publisher = {${bibtexValue(biblio.publisher)}},`);
+  if (biblio.issn) lines.push(`  issn = {${bibtexValue(biblio.issn)}},`);
+  if (biblio.keywords?.length) lines.push(`  keywords = {${bibtexValue(biblio.keywords.join(', '))}},`);
+  if (paper.doi) lines.push(`  doi = {${paper.doi}},`);
+  if (paper.source_url) lines.push(`  url = {${paper.source_url}},`);
+  if (paper.abstract) lines.push(`  abstract = {${bibtexValue(paper.abstract)}},`);
+  lines.push('}');
+  return lines.join('\n');
+}
 
 /**
  * One RIS record.
@@ -126,13 +164,24 @@ const risAuthor = (author: string): string => {
  * handled consistently across them.
  */
 export function risEntry(paper: Paper): string {
-  const lines = ['TY  - JOUR'];
+  const lines = [`TY  - ${RIS_TYPE[getPaperKind(paper)] ?? 'JOUR'}`];
   lines.push(`TI  - ${bibtexValue(clean(paper.title))}`);
   for (const author of paper.authors) {
     lines.push(`AU  - ${risAuthor(author)}`);
   }
   if (paper.year) lines.push(`PY  - ${paper.year}`);
   if (paper.venue) lines.push(`T2  - ${bibtexValue(clean(paper.venue))}`);
+  const biblio = paper.biblio ?? {};
+  if (biblio.volume) lines.push(`VL  - ${bibtexValue(biblio.volume)}`);
+  if (biblio.issue) lines.push(`IS  - ${bibtexValue(biblio.issue)}`);
+  const pages = pageRange(biblio.pages);
+  if (pages) {
+    lines.push(`SP  - ${bibtexValue(pages[0])}`);
+    if (pages[1]) lines.push(`EP  - ${bibtexValue(pages[1])}`);
+  }
+  if (biblio.issn) lines.push(`SN  - ${bibtexValue(biblio.issn)}`);
+  if (biblio.publisher) lines.push(`PB  - ${bibtexValue(biblio.publisher)}`);
+  for (const keyword of biblio.keywords ?? []) lines.push(`KW  - ${bibtexValue(keyword)}`);
   if (paper.doi) lines.push(`DO  - ${paper.doi}`);
   if (paper.abstract) lines.push(`AB  - ${bibtexValue(paper.abstract)}`);
   if (paper.source_url) lines.push(`UR  - ${paper.source_url}`);
@@ -144,5 +193,16 @@ export function risEntry(paper: Paper): string {
 export const risLibrary = (papers: Paper[]) =>
   papers.map(risEntry).join('\n\n').concat(papers.length ? '\n' : '');
 
-export const bibtexLibrary = (papers: Paper[]) =>
-  papers.map((paper) => bibtexCitation(paper)).join('\n\n').concat(papers.length ? '\n' : '');
+/** Citation keys must be unique within a .bib file, so repeats get a numeric suffix. */
+export const bibtexLibrary = (papers: Paper[]) => {
+  const seen = new Map<string, number>();
+  return papers
+    .map((paper) => {
+      const base = bibtexKey(paper);
+      const count = seen.get(base) ?? 0;
+      seen.set(base, count + 1);
+      return bibtexCitation(paper, count ? `${base}${count + 1}` : base);
+    })
+    .join('\n\n')
+    .concat(papers.length ? '\n' : '');
+};

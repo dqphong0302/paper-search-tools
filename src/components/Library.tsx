@@ -24,7 +24,7 @@ import { useSelection } from '../lib/useSelection';
 import { getPaperKind, KIND_META } from '../lib/paperKind';
 import { FulltextViewerModal } from './FulltextViewerModal';
 import { AiAgentExportModal } from './AiAgentExportModal';
-import { gatewayFetch } from '../lib/gateway';
+import { canDownloadPdf, requestPdfDownload } from '../lib/pdfDownload';
 
 const ABSTRACT_CLAMP = 280;
 
@@ -69,7 +69,8 @@ export const Library: React.FC<LibraryProps> = ({
 
   // Batch download state
   const [batchDownloading, setBatchDownloading] = useState(false);
-  const [batchDownloadSuccess, setBatchDownloadSuccess] = useState<number | null>(null);
+  const [batchDownloadSuccess, setBatchDownloadSuccess] = useState<{ done: number; total: number } | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -123,49 +124,34 @@ export const Library: React.FC<LibraryProps> = ({
     setTimeout(() => setExportedBib(false), 2500);
   };
 
-  const handleDownloadPaperPdf = async (paper: Paper) => {
-    if (!paper.pdf_url) return;
+  const handleDownloadPaperPdf = async (paper: Paper): Promise<boolean> => {
+    if (!canDownloadPdf(paper)) return false;
     setDownloadingIds((prev) => new Set(prev).add(paper.id));
-    try {
-      await gatewayFetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paper_id: paper.id,
-          title: paper.title,
-          pdf_url: paper.pdf_url,
-          source: paper.source,
-          year: paper.year,
-        }),
-      });
-    } catch {
-      // Ignored
-    } finally {
-      setDownloadingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(paper.id);
-        return next;
-      });
+    const result = await requestPdfDownload(paper);
+    setDownloadingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(paper.id);
+      return next;
+    });
+    if (!result.ok) {
+      setDownloadError(`${paper.title}: ${result.error}`);
+      setTimeout(() => setDownloadError(null), 12000);
     }
+    return result.ok;
   };
 
   const handleBatchDownload = async () => {
-    const papersWithPdf = workspacePapers.map((wp) => wp.paper).filter((p) => Boolean(p.pdf_url));
+    const papersWithPdf = workspacePapers.map((wp) => wp.paper).filter(canDownloadPdf);
     if (papersWithPdf.length === 0) return;
 
     setBatchDownloading(true);
     let count = 0;
     for (const paper of papersWithPdf) {
-      try {
-        await handleDownloadPaperPdf(paper);
-        count++;
-      } catch {
-        // continue
-      }
+      if (await handleDownloadPaperPdf(paper)) count++;
     }
     setBatchDownloading(false);
-    setBatchDownloadSuccess(count);
-    setTimeout(() => setBatchDownloadSuccess(null), 3500);
+    setBatchDownloadSuccess({ done: count, total: papersWithPdf.length });
+    setTimeout(() => setBatchDownloadSuccess(null), 6000);
   };
 
   const openExportAllToAgent = () => {
@@ -222,7 +208,7 @@ export const Library: React.FC<LibraryProps> = ({
     { id: 'read', label: 'Read', count: counts.read },
   ];
 
-  const totalPdfs = workspacePapers.filter((wp) => Boolean(wp.paper.pdf_url)).length;
+  const totalPdfs = workspacePapers.filter((wp) => canDownloadPdf(wp.paper)).length;
 
   return (
     <div className="page-container">
@@ -267,7 +253,7 @@ export const Library: React.FC<LibraryProps> = ({
                   {batchDownloading
                     ? 'Batch downloading…'
                     : batchDownloadSuccess !== null
-                    ? `Downloaded ${batchDownloadSuccess} PDFs`
+                    ? `Downloaded ${batchDownloadSuccess.done}/${batchDownloadSuccess.total} PDFs`
                     : `Download all PDFs (${totalPdfs})`}
                 </span>
               </button>
@@ -296,6 +282,12 @@ export const Library: React.FC<LibraryProps> = ({
           </div>
         )}
       </div>
+
+      {downloadError && (
+        <div className="alert alert-warning floating-alert" role="alert">
+          {downloadError}
+        </div>
+      )}
 
       {workspacePapers.length > 0 && (
         <div className="segmented" style={{ alignSelf: 'flex-start' }} role="tablist">
@@ -682,7 +674,7 @@ export const Library: React.FC<LibraryProps> = ({
                         )}
                       </div>
 
-                      {paper.pdf_url && (
+                      {canDownloadPdf(paper) && (
                         <button
                           type="button"
                           className="action-btn action-btn-primary"

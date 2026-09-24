@@ -85,6 +85,7 @@ pub async fn search_nasati(
         };
 
         papers.push(Paper {
+            biblio: None,
             id: format!("vista_nasati:{}", pub_id),
             title,
             authors: Vec::new(),

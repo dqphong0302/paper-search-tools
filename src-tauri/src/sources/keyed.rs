@@ -106,6 +106,7 @@ pub async fn search_scopus(
                 });
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("scopus:{}", scopus_id),
                 title: clean_html_text(title),
                 authors,
@@ -230,6 +231,7 @@ pub async fn search_ieee(
                 .or_else(|| Some(format!("https://ieeexplore.ieee.org/document/{}", art_num)));
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("ieee:{}", art_num),
                 title: clean_html_text(title),
                 authors,
@@ -352,6 +354,7 @@ pub async fn search_springer(
                 });
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("springer:{}", doi.as_deref().unwrap_or("unknown")),
                 title: clean_html_text(title),
                 authors,
@@ -429,7 +432,7 @@ pub async fn search_core(
                 .map(|list| {
                     list.iter()
                         .filter_map(|a| a.get("name").and_then(Value::as_str))
-                        .take(5)
+                        .take(crate::models::MAX_AUTHORS)
                         .map(str::to_string)
                         .collect::<Vec<_>>()
                 })
@@ -445,6 +448,7 @@ pub async fn search_core(
                 .map(|v| v.to_string())
                 .unwrap_or_else(|| title.to_string());
             papers.push(Paper {
+                biblio: None,
                 id: format!("core:{id}"),
                 title: clean_html_text(title),
                 authors,
@@ -533,7 +537,7 @@ pub async fn search_dimensions(
                             let name = format!("{} {}", first, last).trim().to_string();
                             (!name.is_empty()).then_some(name)
                         })
-                        .take(5)
+                        .take(crate::models::MAX_AUTHORS)
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
@@ -543,6 +547,7 @@ pub async fn search_dimensions(
                 .map(|v| v.to_string())
                 .unwrap_or_else(|| title.to_string());
             papers.push(Paper {
+                biblio: None,
                 id: format!("dimensions:{id}"),
                 title: clean_html_text(title),
                 authors,
@@ -631,7 +636,7 @@ pub async fn search_web_of_science(
                 .map(|list| {
                     list.iter()
                         .filter_map(|a| a.get("displayName").and_then(Value::as_str))
-                        .take(5)
+                        .take(crate::models::MAX_AUTHORS)
                         .map(str::to_string)
                         .collect::<Vec<_>>()
                 })
@@ -652,6 +657,7 @@ pub async fn search_web_of_science(
                     ))
                 });
             papers.push(Paper {
+                biblio: None,
                 id: format!("wos:{}", uid),
                 title: clean_html_text(title),
                 authors,

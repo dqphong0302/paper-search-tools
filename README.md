@@ -15,6 +15,8 @@ ScholarGate combines two jobs in one fully local app (macOS/Windows/Linux — no
 - **A catalog of 66 first-party sources** (cleaned up: every bot-blocked site and every site without an open API has been removed). Main groups: multidisciplinary indexes (OpenAlex, Crossref, Semantic Scholar, OpenAIRE, CORE*, Dimensions*, Web of Science*), preprints (arXiv), biomedical (PubMed, Europe PMC, PMC, PLOS, bioRxiv/medRxiv, ClinicalTrials.gov, ClinVar, NCBI GEO), open access (DOAJ, Zenodo), humanities (HAL), data and reports (Dryad, Dataverse, Figshare, NTRS, World Bank, SEC EDGAR), regional sources (CiNii, AJOL, ThaiJO, VJOL, VAST, JST-HUST, VNU-JS, BanglaJOL, NepJOL…), domain data (UniProt, openFDA, CISA KEV) and keyed sources (marked `*`: Scopus, IEEE, Springer, Perplexity). An optional **external SearXNG** connector adds metasearch.
 - **Record kind**: every result is classified as `article` (default), `dataset` (Dryad/Dataverse/Zenodo/HF Datasets/Figshare/NCBI GEO), `report` (NTRS/World Bank/SEC EDGAR), `advisory` (NVD CVE/CISA KEV), `discussion` (Stack Exchange) or `record` (UniProt/openFDA/ClinVar). The UI shows a kind badge and offers a **Kind** filter in Explorer, so non-article data is never presented as a paper.
 - Results are merged with **Reciprocal Rank Fusion (RRF k=60)**, duplicate metadata is combined, and Open Access PDF links are filled in via **Unpaywall** (when an email is configured).
+- **Bibliographic metadata** — volume, issue, pages, ISSN, publisher and keywords — is collected from OpenAlex, Crossref, PubMed and Europe PMC and merged across duplicates, and records keep up to 100 authors, so RIS/BibTeX exports import completely into Zotero, EndNote and Mendeley.
+- **PDF download with fallback**: when the advertised PDF link is blocked or missing, the gateway looks up other open-access copies of the DOI (OpenAlex locations, and Unpaywall when an email is configured) before giving up.
 - Every paper carries a **`source_url`** pointing at the original record (OpenAlex/PubMed/arXiv/Crossref/Europe PMC…), even when there is no DOI.
 - Year filtering and `open_access_only` are applied **server-side**; the response carries `total` (returned) and `available_total` (matches before the cut) for pagination.
 - SQLite cache with a configurable TTL, query history and telemetry.
@@ -66,12 +68,12 @@ The interface is **English throughout**, including preset and source-group names
 
 | Workspace | Contents |
 |---|---|
-| **Search** | **Academic Papers / Academic Web** toggle. An overview landing page before the first query; Explorer once there are results (filter by source, year, OA, sort, download PDFs, save to a workspace, "Load more"). Results sit directly under the filter bar; the two analysis panels (**Document Overview**, **Sample Audit & Landscape**) sit **below** the list and are collapsed by default. |
-| **Library** | Papers in the workspace (with notes, tags, reading status, .RIS export), downloaded PDFs, queries, and the research tools. |
+| **Search** | **Academic Papers / Academic Web** toggle. An overview landing page before the first query; Explorer once there are results (filter by source, year, OA, sort, download PDFs, mark papers of interest, export ticked results as .RIS/.bib, "Load more"). Results sit directly under the filter bar; the two analysis panels (**Document Overview**, **Sample Audit & Landscape**) sit **below** the list and are collapsed by default. |
+| **Library** | The **Interest Library**: papers marked with **Interest** (notes, tags, reading status, .RIS/.bib export, batch PDF download), downloaded PDFs, search history, and the research tools. |
 | **Connections** | Per-workspace agent access; MCP & skills; gateway activity. |
 | **Settings** | Four groups: **Search Sources** (presets, enable/disable, credential readiness, per-source health checks), **Connections & Keys** (LLM providers, source credentials, MetaSearch/SearXNG), **AI Clients** (install MCP + skills into Claude, Codex, Antigravity), **Gateway & Security** (token, port, rate limit, timeout, cache, download directory, Update Center, backup/restore). |
 
-Pick the workspace in the **top bar** (dropdown plus a `+` button). Every saved paper and query belongs to the selected workspace.
+The desktop UI works on a single **Interest Library** (the default workspace). Additional workspaces are created and used through the REST API and MCP tools (`/api/workspaces`, `list_workspaces`, `get_workspace`, `save_paper_to_workspace`), which is how agents keep per-project results apart.
 
 ---
 

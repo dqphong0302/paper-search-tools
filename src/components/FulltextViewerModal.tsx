@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Paper } from '../types';
 import { apaCitation, bibtexCitation } from '../lib/citation';
+import { canDownloadPdf } from '../lib/pdfDownload';
 import { evaluatePaper, getSourceGroup, SOURCE_GROUPS } from '../lib/paperEvaluation';
 import { getPaperKind, KIND_META } from '../lib/paperKind';
 
@@ -216,7 +217,7 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
               </a>
             )}
 
-            {paper.pdf_url && onDownloadPdf && (
+            {canDownloadPdf(paper) && onDownloadPdf && (
               <button
                 type="button"
                 className="action-btn action-btn-primary"

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Compass, Loader2 } from 'lucide-react';
 import searchCatalog from '../lib/searchCatalog.json';
 
@@ -20,20 +20,30 @@ export const TopicSetupModal: React.FC<TopicSetupModalProps> = ({ onComplete }) 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const save = async () => {
-    const preset = selected === 'auto'
+  const save = async (choice = selected) => {
+    if (saving) return;
+    const preset = choice === 'auto'
       ? searchCatalog.presets.find((item) => item.id === 'auto')
-      : topics.find((item) => item.id === selected);
+      : topics.find((item) => item.id === choice);
     const sources = (preset?.sources ?? []).filter((id) => availableIds.has(id));
     setSaving(true);
     setError('');
     try {
-      await onComplete(selected, sources);
+      await onComplete(choice, sources);
     } catch (reason) {
       setError(`Could not save your choice: ${(reason as Error).message}`);
       setSaving(false);
     }
   };
+
+  // Skipping is the Auto-detect default, so a first-run user is never trapped here.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') void save('auto');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   return <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="topic-setup-title">
     <div className="modal-dialog" style={{ maxWidth: 760, width: '92vw', maxHeight: '88vh', overflowY: 'auto' }}>
@@ -51,7 +61,9 @@ export const TopicSetupModal: React.FC<TopicSetupModalProps> = ({ onComplete }) 
         </button>)}
       </div>
       {error && <div className="alert alert-warning" role="alert" style={{ margin: '0 20px' }}>{error}</div>}
-      <div className="modal-footer"><button id="topic-setup-save" type="button" className="action-btn action-btn-primary" disabled={saving} onClick={() => void save()}>
+      <div className="modal-footer"><button id="topic-setup-skip" type="button" className="action-btn" disabled={saving} onClick={() => void save('auto')}>
+        Skip — use Auto-detect
+      </button><button id="topic-setup-save" type="button" className="action-btn action-btn-primary" disabled={saving} onClick={() => void save()}>
         {saving && <Loader2 size={14} className="animate-spin" />}<span>{saving ? 'Saving…' : 'Start searching'}</span>
       </button></div>
     </div>

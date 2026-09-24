@@ -393,6 +393,7 @@ pub fn parse_ojs_results(
             });
 
         papers.push(Paper {
+            biblio: None,
             id: format!("{}:{}", config.source_id, article_id),
             title,
             authors,

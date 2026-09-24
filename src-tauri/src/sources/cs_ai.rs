@@ -112,6 +112,7 @@ pub async fn search_dblp(
                 .unwrap_or_else(|| doi.as_deref().unwrap_or("unknown"));
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("dblp:{}", dblp_id),
                 title: clean_html_text(title),
                 authors,
@@ -194,6 +195,7 @@ SELECT ?publication ?title ?year ?venue ?doi WHERE {{
                     .to_string()
             });
             Some(Paper {
+                biblio: None,
                 id: format!(
                     "dblp:{}",
                     source_url.trim_start_matches("https://dblp.org/rec/")
@@ -334,6 +336,7 @@ pub async fn search_huggingface(
             let source_url = format!("https://huggingface.co/papers/{}", id_str);
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("{}:{}", source_id, id_str),
                 title: clean_html_text(title),
                 authors,
@@ -451,6 +454,7 @@ pub async fn search_openreview(
             let source_url = format!("https://openreview.net/forum?id={}", note_id);
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("openreview:{}", note_id),
                 title: clean_html_text(title),
                 authors,

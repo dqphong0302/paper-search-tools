@@ -4,6 +4,7 @@ import {
   ExternalLink, FileCheck2, GitBranch, Loader2, X,
 } from 'lucide-react';
 import { Paper } from '../types';
+import { canDownloadPdf } from '../lib/pdfDownload';
 import { evaluatePaper, getSourceGroup, SOURCE_GROUPS } from '../lib/paperEvaluation';
 import { getPaperKind, KIND_META } from '../lib/paperKind';
 import {
@@ -208,6 +209,24 @@ function PaperCardImpl({
               <span>{isSaved ? 'In interest list' : 'Interest'}</span>
             </button>
 
+            {canDownloadPdf(paper) && !isSelected && (
+              <button
+                className="action-btn"
+                onClick={() => onDownload(paper)}
+                disabled={isDownloading || isDownloaded}
+                title="Download the full-text PDF"
+              >
+                {isDownloading ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : isDownloaded ? (
+                  <Check size={14} />
+                ) : (
+                  <Download size={14} />
+                )}
+                <span>{isDownloaded ? 'Downloaded' : isDownloading ? 'Downloading…' : 'PDF'}</span>
+              </button>
+            )}
+
             {originalPaperUrl(paper) && (
               <a
                 className="action-btn"
@@ -351,7 +370,7 @@ function PaperCardImpl({
                 </button>
               </div>
 
-              {paper.pdf_url && (
+              {canDownloadPdf(paper) && (
                 <button
                   className="action-btn action-btn-primary"
                   onClick={() => onDownload(paper)}
