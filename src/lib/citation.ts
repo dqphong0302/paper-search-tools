@@ -1,4 +1,5 @@
 import { Paper } from '../types';
+import { getPaperKind } from './paperKind';
 
 const clean = (value?: string) => (value || '').replace(/\s+/g, ' ').trim();
 
@@ -96,26 +97,36 @@ export function bibtexKey(paper: Paper): string {
   return slug || 'paper';
 }
 
-export function bibtexCitation(paper: Paper, key = bibtexKey(paper)): string {
-  const lines = [`@article{${key},`];
-  lines.push(`  title = {${bibtexValue(clean(paper.title))}},`);
-  if (paper.authors.length) {
-    lines.push(`  author = {${bibtexValue(paper.authors.join(' and '))}},`);
-  }
-  if (paper.year) lines.push(`  year = {${paper.year}},`);
-  if (paper.venue) lines.push(`  journal = {${bibtexValue(clean(paper.venue))}},`);
-  if (paper.doi) lines.push(`  doi = {${paper.doi}},`);
-  if (paper.source_url) lines.push(`  url = {${paper.source_url}},`);
-  lines.push('}');
-  return lines.join('\n');
-}
-
 /** RIS wants "Family, Given"; a raw "John Smith" is read as a single-field name. */
 const risAuthor = (author: string): string => {
   const { family, given } = familyGiven(author);
   if (!family) return bibtexValue(clean(author));
   return bibtexValue(given ? `${family}, ${given}` : family);
 };
+
+/** Non-article records (datasets, reports, …) must not be imported as journal articles. */
+const RIS_TYPE: Record<string, string> = { dataset: 'DATA', report: 'RPRT', software: 'COMP' };
+const BIBTEX_TYPE: Record<string, string> = { article: 'article', report: 'techreport' };
+
+export function bibtexCitation(paper: Paper, key = bibtexKey(paper)): string {
+  const kind = getPaperKind(paper);
+  const type = BIBTEX_TYPE[kind] ?? 'misc';
+  const lines = [`@${type}{${key},`];
+  lines.push(`  title = {${bibtexValue(clean(paper.title))}},`);
+  if (paper.authors.length) {
+    // "Family, Given" so BibTeX readers don't swap PubMed-style "Bhat AI".
+    lines.push(`  author = {${paper.authors.map(risAuthor).join(' and ')}},`);
+  }
+  if (paper.year) lines.push(`  year = {${paper.year}},`);
+  if (paper.venue) {
+    const field = type === 'article' ? 'journal' : type === 'techreport' ? 'institution' : 'howpublished';
+    lines.push(`  ${field} = {${bibtexValue(clean(paper.venue))}},`);
+  }
+  if (paper.doi) lines.push(`  doi = {${paper.doi}},`);
+  if (paper.source_url) lines.push(`  url = {${paper.source_url}},`);
+  lines.push('}');
+  return lines.join('\n');
+}
 
 /**
  * One RIS record.
@@ -126,7 +137,7 @@ const risAuthor = (author: string): string => {
  * handled consistently across them.
  */
 export function risEntry(paper: Paper): string {
-  const lines = ['TY  - JOUR'];
+  const lines = [`TY  - ${RIS_TYPE[getPaperKind(paper)] ?? 'JOUR'}`];
   lines.push(`TI  - ${bibtexValue(clean(paper.title))}`);
   for (const author of paper.authors) {
     lines.push(`AU  - ${risAuthor(author)}`);
@@ -144,5 +155,16 @@ export function risEntry(paper: Paper): string {
 export const risLibrary = (papers: Paper[]) =>
   papers.map(risEntry).join('\n\n').concat(papers.length ? '\n' : '');
 
-export const bibtexLibrary = (papers: Paper[]) =>
-  papers.map((paper) => bibtexCitation(paper)).join('\n\n').concat(papers.length ? '\n' : '');
+/** Citation keys must be unique within a .bib file, so repeats get a numeric suffix. */
+export const bibtexLibrary = (papers: Paper[]) => {
+  const seen = new Map<string, number>();
+  return papers
+    .map((paper) => {
+      const base = bibtexKey(paper);
+      const count = seen.get(base) ?? 0;
+      seen.set(base, count + 1);
+      return bibtexCitation(paper, count ? `${base}${count + 1}` : base);
+    })
+    .join('\n\n')
+    .concat(papers.length ? '\n' : '');
+};

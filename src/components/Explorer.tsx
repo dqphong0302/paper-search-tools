@@ -1242,6 +1242,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
             borderRadius: 'var(--radius-sm)',
             background: 'var(--cockpit-card)',
             fontSize: 12,
+            // Keep the export actions reachable while scrolling through ticked results.
+            position: 'sticky',
+            top: 0,
+            zIndex: 5,
           }}
         >
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>

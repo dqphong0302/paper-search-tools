@@ -208,6 +208,24 @@ function PaperCardImpl({
               <span>{isSaved ? 'In interest list' : 'Interest'}</span>
             </button>
 
+            {paper.pdf_url && !isSelected && (
+              <button
+                className="action-btn"
+                onClick={() => onDownload(paper)}
+                disabled={isDownloading || isDownloaded}
+                title="Download the full-text PDF"
+              >
+                {isDownloading ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : isDownloaded ? (
+                  <Check size={14} />
+                ) : (
+                  <Download size={14} />
+                )}
+                <span>{isDownloaded ? 'Downloaded' : isDownloading ? 'Downloading…' : 'PDF'}</span>
+              </button>
+            )}
+
             {originalPaperUrl(paper) && (
               <a
                 className="action-btn"

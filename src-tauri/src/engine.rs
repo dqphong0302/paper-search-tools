@@ -1888,12 +1888,17 @@ fn reconstruct_abstract(val: Option<&serde_json::Value>) -> Option<String> {
     Some(abstract_str)
 }
 
+/// The best location often has only a landing page while a repository copy
+/// (PMC, arXiv, an institutional archive) carries the PDF, so fall back to
+/// the other open-access locations before giving up.
 fn unpaywall_pdf_url(json: &serde_json::Value) -> Option<String> {
-    json.get("best_oa_location")?
-        .get("url_for_pdf")?
-        .as_str()
+    let others = json.get("oa_locations").and_then(|v| v.as_array());
+    std::iter::once(json.get("best_oa_location"))
+        .chain(others.into_iter().flatten().map(Some))
+        .flatten()
+        .filter_map(|location| location.get("url_for_pdf")?.as_str())
         .map(str::trim)
-        .filter(|url| !url.is_empty())
+        .find(|url| !url.is_empty())
         .map(str::to_string)
 }
 
@@ -2573,6 +2578,18 @@ mod tests {
             Some("https://example.org/article.pdf")
         );
         assert_eq!(unpaywall_pdf_url(&landing_only), None);
+
+        let repository_copy = serde_json::json!({
+            "best_oa_location": { "url_for_pdf": null, "url": "https://doi.org/10.1234/example" },
+            "oa_locations": [
+                { "url_for_pdf": null },
+                { "url_for_pdf": "https://europepmc.org/articles/PMC1/pdf" }
+            ]
+        });
+        assert_eq!(
+            unpaywall_pdf_url(&repository_copy).as_deref(),
+            Some("https://europepmc.org/articles/PMC1/pdf")
+        );
     }
 
     #[test]

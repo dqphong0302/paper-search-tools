@@ -4,6 +4,7 @@ import {
   apaCitation,
   bibtexCitation,
   bibtexKey,
+  bibtexLibrary,
   risEntry,
   risLibrary,
   vancouverCitation,
@@ -37,7 +38,7 @@ describe('citation formats', () => {
   it('builds a BibTeX entry with a stable key', () => {
     const entry = bibtexCitation(paper);
     expect(entry).toContain('@article{Smith2024Deep,');
-    expect(entry).toContain('author = {John Smith and Tran, Thi B},');
+    expect(entry).toContain('author = {Smith, John and Tran, Thi B},');
     expect(entry).toContain('doi = {10.1000/xyz},');
     expect(bibtexKey(paper)).toBe('Smith2024Deep');
   });
@@ -76,6 +77,20 @@ describe('citation formats', () => {
     expect(entry).toContain('AU  - Greeshma, M');
     expect(apaCitation(pubmed)).toContain('Bhat, A. I.');
     expect(vancouverCitation(pubmed)).toContain('Bhat AI');
+    expect(bibtexCitation(pubmed)).toContain('author = {Bhat, AI and Greeshma, M},');
+  });
+
+  it('gives repeated BibTeX keys a suffix so a .bib stays importable', () => {
+    const output = bibtexLibrary([paper, { ...paper, id: 'p2' }]);
+    expect(output).toContain('@article{Smith2024Deep,');
+    expect(output).toContain('@article{Smith2024Deep2,');
+  });
+
+  it('does not export datasets as journal articles', () => {
+    const dataset: Paper = { ...paper, source: 'Zenodo' };
+    expect(risEntry(dataset)).toContain('TY  - DATA');
+    expect(bibtexCitation(dataset)).toContain('@misc{');
+    expect(bibtexCitation(dataset)).toContain('howpublished = {Journal of AI},');
   });
 
   it('keeps a single-name author usable', () => {
