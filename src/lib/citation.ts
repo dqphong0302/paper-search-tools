@@ -3,6 +3,14 @@ import { getPaperKind } from './paperKind';
 
 const clean = (value?: string) => (value || '').replace(/\s+/g, ' ').trim();
 
+/** "123-130" / "123–130" → ["123", "130"]; a single page or article number stays alone. */
+const pageRange = (pages?: string): [string, string?] | null => {
+  const value = clean(pages);
+  if (!value) return null;
+  const [start, end] = value.split(/\s*[-–—]+\s*/);
+  return end ? [start, end] : [start];
+};
+
 const bibtexValue = (value: string) =>
   value.replace(/[{}]/g, '').replace(/[\r\n]+/g, ' ').trim();
 
@@ -71,7 +79,14 @@ export function apaCitation(paper: Paper): string {
     ? `${authors.slice(0, 3).join(', ')}${authors.length > 3 ? ', et al.' : ''}`
     : 'N.d.';
   const year = paper.year ? `(${paper.year}).` : '(n.d.).';
-  const venue = paper.venue ? ` ${clean(paper.venue)}.` : '';
+  const { volume, issue, pages } = paper.biblio ?? {};
+  const locator = [
+    volume ? `${clean(volume)}${issue ? `(${clean(issue)})` : ''}` : '',
+    pages ? clean(pages).replace(/\s*-+\s*/, '–') : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const venue = paper.venue ? ` ${clean(paper.venue)}${locator ? `, ${locator}` : ''}.` : '';
   const doi = paper.doi ? ` https://doi.org/${paper.doi}` : paper.source_url ? ` ${paper.source_url}` : '';
   return `${authorText} ${year} ${clean(paper.title)}.${venue}${doi}`.replace(/\s+/g, ' ').trim();
 }
@@ -85,7 +100,10 @@ export function vancouverCitation(paper: Paper): string {
     ? `${authors.join(', ')}${paper.authors.length > 6 ? ', et al' : ''}.`
     : '';
   const venue = paper.venue ? ` ${clean(paper.venue)}.` : '';
-  const year = paper.year ? ` ${paper.year}` : '';
+  const { volume, issue, pages } = paper.biblio ?? {};
+  const year = paper.year
+    ? ` ${paper.year}${volume ? `;${clean(volume)}` : ''}${volume && issue ? `(${clean(issue)})` : ''}${pages ? `:${clean(pages)}` : ''}`
+    : '';
   const locator = paper.doi ? ` doi:${paper.doi}` : paper.source_url ? ` ${paper.source_url}` : '';
   return `${authorText} ${clean(paper.title)}.${venue}${year}.${locator}`.replace(/\s+/g, ' ').trim();
 }
@@ -122,8 +140,17 @@ export function bibtexCitation(paper: Paper, key = bibtexKey(paper)): string {
     const field = type === 'article' ? 'journal' : type === 'techreport' ? 'institution' : 'howpublished';
     lines.push(`  ${field} = {${bibtexValue(clean(paper.venue))}},`);
   }
+  const biblio = paper.biblio ?? {};
+  if (biblio.volume) lines.push(`  volume = {${bibtexValue(biblio.volume)}},`);
+  if (biblio.issue) lines.push(`  number = {${bibtexValue(biblio.issue)}},`);
+  const pages = pageRange(biblio.pages);
+  if (pages) lines.push(`  pages = {${bibtexValue(pages.filter(Boolean).join('--'))}},`);
+  if (biblio.publisher) lines.push(`  publisher = {${bibtexValue(biblio.publisher)}},`);
+  if (biblio.issn) lines.push(`  issn = {${bibtexValue(biblio.issn)}},`);
+  if (biblio.keywords?.length) lines.push(`  keywords = {${bibtexValue(biblio.keywords.join(', '))}},`);
   if (paper.doi) lines.push(`  doi = {${paper.doi}},`);
   if (paper.source_url) lines.push(`  url = {${paper.source_url}},`);
+  if (paper.abstract) lines.push(`  abstract = {${bibtexValue(paper.abstract)}},`);
   lines.push('}');
   return lines.join('\n');
 }
@@ -144,6 +171,17 @@ export function risEntry(paper: Paper): string {
   }
   if (paper.year) lines.push(`PY  - ${paper.year}`);
   if (paper.venue) lines.push(`T2  - ${bibtexValue(clean(paper.venue))}`);
+  const biblio = paper.biblio ?? {};
+  if (biblio.volume) lines.push(`VL  - ${bibtexValue(biblio.volume)}`);
+  if (biblio.issue) lines.push(`IS  - ${bibtexValue(biblio.issue)}`);
+  const pages = pageRange(biblio.pages);
+  if (pages) {
+    lines.push(`SP  - ${bibtexValue(pages[0])}`);
+    if (pages[1]) lines.push(`EP  - ${bibtexValue(pages[1])}`);
+  }
+  if (biblio.issn) lines.push(`SN  - ${bibtexValue(biblio.issn)}`);
+  if (biblio.publisher) lines.push(`PB  - ${bibtexValue(biblio.publisher)}`);
+  for (const keyword of biblio.keywords ?? []) lines.push(`KW  - ${bibtexValue(keyword)}`);
   if (paper.doi) lines.push(`DO  - ${paper.doi}`);
   if (paper.abstract) lines.push(`AB  - ${bibtexValue(paper.abstract)}`);
   if (paper.source_url) lines.push(`UR  - ${paper.source_url}`);

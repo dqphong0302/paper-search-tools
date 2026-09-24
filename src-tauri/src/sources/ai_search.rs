@@ -132,6 +132,7 @@ pub async fn search_perplexity(
             .map(clean_html_text);
 
         papers.push(Paper {
+            biblio: None,
             id: format!(
                 "perplexity:{}",
                 doi.as_deref().unwrap_or(&format!("p-{}", idx))
@@ -334,6 +335,7 @@ pub async fn search_consensus(
             .unwrap_or_else(|| format!("consensus:{}", idx));
 
         papers.push(Paper {
+            biblio: None,
             id,
             title: clean_html_text(title),
             authors,
@@ -484,6 +486,7 @@ pub async fn search_openevidence(
             .unwrap_or_else(|| format!("openevidence:{}", idx));
 
         papers.push(Paper {
+            biblio: None,
             id,
             title: clean_html_text(title),
             authors,

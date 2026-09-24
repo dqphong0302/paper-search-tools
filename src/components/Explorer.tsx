@@ -26,6 +26,7 @@ import { evaluatePaper, getSourceGroup, SOURCE_GROUPS, SourceGroup } from '../li
 import { apaCitation, bibtexCitation } from '../lib/citation';
 import { getPaperKind, KIND_META, PaperKind } from '../lib/paperKind';
 import { gatewayFetch } from '../lib/gateway';
+import { canDownloadPdf, requestPdfDownload } from '../lib/pdfDownload';
 import { useSelection } from '../lib/useSelection';
 import { bibtexLibrary, risLibrary } from '../lib/citation';
 import { SourceLimiterModal } from './SourceLimiterModal';
@@ -468,38 +469,18 @@ export const Explorer: React.FC<ExplorerProps> = ({
   }, []);
 
   const handleDownload = useCallback(async (paper: Paper) => {
-    if (!paper.pdf_url) return;
+    if (!canDownloadPdf(paper)) return;
     setDownloadingId(paper.id);
     setDownloadError(null);
-    try {
-      const res = await gatewayFetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paper_id: paper.id,
-          title: paper.title,
-          pdf_url: paper.pdf_url,
-          source: paper.source,
-          year: paper.year,
-        }),
-      });
-      const json = await res.json().catch(() => null);
-      if (!res.ok || (json && json.success === false)) {
-        setDownloadError({
-          message: json?.error || `The gateway returned status ${res.status}`,
-          paper,
-        });
-        setTimeout(() => setDownloadError(null), 12000);
-        return;
-      }
-      setDownloadSuccessId(paper.id);
-      setTimeout(() => setDownloadSuccessId(null), 3000);
-    } catch (err) {
-      setDownloadError({ message: `PDF download failed: ${(err as Error).message}`, paper });
+    const result = await requestPdfDownload(paper);
+    setDownloadingId(null);
+    if (!result.ok) {
+      setDownloadError({ message: result.error, paper });
       setTimeout(() => setDownloadError(null), 12000);
-    } finally {
-      setDownloadingId(null);
+      return;
     }
+    setDownloadSuccessId(paper.id);
+    setTimeout(() => setDownloadSuccessId(null), 3000);
   }, []);
 
   const openFulltextReader = useCallback((paper: Paper) => {

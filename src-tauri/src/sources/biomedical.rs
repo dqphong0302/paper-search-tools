@@ -108,6 +108,7 @@ pub async fn search_clinicaltrials(
             let source_url = format!("https://clinicaltrials.gov/study/{}", nct_id);
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("nct:{}", nct_id),
                 title,
                 authors,
@@ -231,6 +232,7 @@ pub async fn search_biorxiv_medrxiv(
             };
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("{}:{}", source_id, doi.as_deref().unwrap_or("unknown")),
                 title: clean_html_text(title),
                 authors,
@@ -338,6 +340,7 @@ pub async fn search_plos(
             );
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("plos:{}", doi),
                 title: clean_html_text(title),
                 authors,
@@ -469,6 +472,7 @@ pub async fn search_pmc(
             let pdf_url = format!("https://www.ncbi.nlm.nih.gov/pmc/articles/PMC{}/pdf/", id);
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("pmc:PMC{}", id),
                 title: clean_html_text(title),
                 authors,

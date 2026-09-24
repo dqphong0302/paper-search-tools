@@ -99,6 +99,23 @@ describe('citation formats', () => {
     expect(entry).not.toContain('AU  - Plato,');
   });
 
+  it('exports volume, issue, pages, ISSN, publisher and keywords', () => {
+    const full: Paper = {
+      ...paper,
+      biblio: { volume: '12', issue: '3', pages: '45-67', issn: '1234-5678', publisher: 'Elsevier', keywords: ['AI', 'health'] },
+    };
+    const ris = risEntry(full);
+    for (const line of ['VL  - 12', 'IS  - 3', 'SP  - 45', 'EP  - 67', 'SN  - 1234-5678', 'PB  - Elsevier', 'KW  - AI', 'KW  - health']) {
+      expect(ris).toContain(line);
+    }
+    const bib = bibtexCitation(full);
+    expect(bib).toContain('volume = {12},');
+    expect(bib).toContain('number = {3},');
+    expect(bib).toContain('pages = {45--67},');
+    expect(apaCitation(full)).toContain('Journal of AI, 12(3), 45–67.');
+    expect(vancouverCitation(full)).toContain('2024;12(3):45-67.');
+  });
+
   it('joins a library export and terminates with a newline', () => {
     const output = risLibrary([paper, { ...paper, id: 'p2' }]);
     expect(output.match(/TY {2}- JOUR/g)).toHaveLength(2);

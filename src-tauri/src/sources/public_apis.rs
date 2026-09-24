@@ -51,7 +51,7 @@ pub async fn search_cinii(
                                 .map(str::to_string),
                             _ => None,
                         })
-                        .take(5)
+                        .take(crate::models::MAX_AUTHORS)
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
@@ -72,6 +72,7 @@ pub async fn search_cinii(
                 .unwrap_or(title)
                 .to_string();
             papers.push(Paper {
+                biblio: None,
                 id: format!("cinii:{id}"),
                 title: clean_html_text(title),
                 authors,
@@ -140,7 +141,7 @@ pub async fn search_dryad(
                             let name = format!("{} {}", given, family).trim().to_string();
                             (!name.is_empty()).then_some(name)
                         })
-                        .take(5)
+                        .take(crate::models::MAX_AUTHORS)
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
@@ -154,6 +155,7 @@ pub async fn search_dryad(
                 .map(|id| id.to_string())
                 .unwrap_or_else(|| title.to_string());
             papers.push(Paper {
+                biblio: None,
                 id: format!("dryad:{id}"),
                 title: title.to_string(),
                 authors,
@@ -217,6 +219,7 @@ pub async fn search_dataverse(
                 .as_ref()
                 .map(|id| id.trim_start_matches("doi:").to_string());
             papers.push(Paper {
+                biblio: None,
                 id: format!(
                     "dataverse:{}",
                     global_id.clone().unwrap_or_else(|| title.to_string())
@@ -282,6 +285,7 @@ pub async fn search_ntrs(
                 })
                 .unwrap_or_else(|| title.to_string());
             papers.push(Paper {
+                biblio: None,
                 id: format!("ntrs:{id}"),
                 title: title.to_string(),
                 authors: Vec::new(),
@@ -335,6 +339,7 @@ pub async fn search_worldbank(
                 continue;
             };
             papers.push(Paper {
+                biblio: None,
                 id: format!("worldbank:{key}"),
                 title: title.trim().to_string(),
                 authors: Vec::new(),
@@ -399,7 +404,7 @@ pub async fn search_doab(
                         entry.get("key").and_then(Value::as_str) == Some("dc.contributor.author")
                     })
                     .filter_map(|entry| entry.get("value").and_then(Value::as_str))
-                    .take(5)
+                    .take(crate::models::MAX_AUTHORS)
                     .map(str::to_string)
                     .collect::<Vec<_>>()
             })
@@ -408,6 +413,7 @@ pub async fn search_doab(
         let uri = meta_value("dc.identifier.uri");
         let doi = meta_value("dc.identifier.doi");
         papers.push(Paper {
+            biblio: None,
             id: format!(
                 "doab:{}",
                 item.get("uuid").and_then(Value::as_str).unwrap_or(&title)
@@ -487,7 +493,7 @@ pub async fn search_openaire(
                 .map(text_list)
                 .unwrap_or_default()
                 .into_iter()
-                .take(5)
+                .take(crate::models::MAX_AUTHORS)
                 .collect();
             let doi = entity
                 .get("pid")
@@ -505,6 +511,7 @@ pub async fn search_openaire(
                 .or_else(|| entity.get("originalId").and_then(first_text))
                 .unwrap_or_else(|| title.clone());
             papers.push(Paper {
+                biblio: None,
                 id: format!("openaire:{id}"),
                 title: clean_html_text(&title),
                 authors: creators,
@@ -560,6 +567,7 @@ pub async fn search_cve_nvd(
                         .find_map(|entry| entry.get("value").and_then(Value::as_str))
                 });
             papers.push(Paper {
+                biblio: None,
                 id: format!("cve:{id}"),
                 title: format!(
                     "{id}: {}",
@@ -606,6 +614,7 @@ pub async fn search_huggingface_datasets(
             continue;
         };
         papers.push(Paper {
+            biblio: None,
             id: format!("hfds:{id}"),
             title: id.to_string(),
             authors: item
@@ -660,6 +669,7 @@ pub async fn search_stackexchange(
                 .and_then(Value::as_u64)
                 .unwrap_or_default();
             papers.push(Paper {
+                biblio: None,
                 id: format!("stackexchange:{id}"),
                 title: clean_html_text(title),
                 authors: item
@@ -795,6 +805,7 @@ pub async fn search_openfda(
             let Some(title) = title else { continue };
             let id = item.get("id").and_then(Value::as_str).unwrap_or(title);
             papers.push(Paper {
+                biblio: None,
                 id: format!("openfda:{id}"),
                 title: format!("Drug label: {}", clean_html_text(title)),
                 authors: item
@@ -854,6 +865,7 @@ pub async fn search_uniprot(
                 .and_then(Value::as_str)
                 .unwrap_or(accession);
             papers.push(Paper {
+                biblio: None,
                 id: format!("uniprot:{accession}"),
                 title: format!("{} ({})", name, accession),
                 authors: Vec::new(),
@@ -902,6 +914,7 @@ pub async fn search_geo(
             continue;
         };
         papers.push(Paper {
+            biblio: None,
             id: format!("geo:{id}"),
             title: title.to_string(),
             authors: Vec::new(),
@@ -955,6 +968,7 @@ pub async fn search_clinvar(
             continue;
         };
         papers.push(Paper {
+            biblio: None,
             id: format!("clinvar:{id}"),
             title: title.to_string(),
             authors: Vec::new(),
@@ -1000,6 +1014,7 @@ pub async fn search_figshare(
         };
         let id = item.get("id").and_then(Value::as_u64).unwrap_or_default();
         papers.push(Paper {
+            biblio: None,
             id: format!("figshare:{id}"),
             title: clean_html_text(title),
             authors: item
@@ -1008,7 +1023,7 @@ pub async fn search_figshare(
                 .map(|list| {
                     list.iter()
                         .filter_map(|a| a.get("full_name").and_then(Value::as_str))
-                        .take(5)
+                        .take(crate::models::MAX_AUTHORS)
                         .map(str::to_string)
                         .collect::<Vec<_>>()
                 })
@@ -1092,6 +1107,7 @@ pub async fn search_sec_edgar(
                 .and_then(Value::as_str);
             let id = hit.get("_id").and_then(Value::as_str).unwrap_or(entity);
             papers.push(Paper {
+                biblio: None,
                 id: format!("sec:{id}"),
                 title: format!("{} — {}", entity, form),
                 authors: Vec::new(),
@@ -1156,6 +1172,7 @@ pub async fn search_cisa_kev(
                 .and_then(Value::as_str)
                 .unwrap_or("Known exploited vulnerability");
             papers.push(Paper {
+                biblio: None,
                 id: format!("kev:{cve}"),
                 title: format!("{cve}: {}", name),
                 authors: item

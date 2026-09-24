@@ -13,6 +13,18 @@ export interface Paper {
   source: string;
   score?: number;
   open_access: boolean;
+  biblio?: Biblio;
+}
+
+/** Bibliographic details reference managers need beyond title/authors/venue. */
+export interface Biblio {
+  volume?: string;
+  issue?: string;
+  /** "123-130" or a single article number. */
+  pages?: string;
+  issn?: string;
+  publisher?: string;
+  keywords?: string[];
 }
 
 export interface Workspace {

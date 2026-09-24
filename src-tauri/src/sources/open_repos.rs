@@ -116,6 +116,7 @@ pub async fn search_inspire_hep(
             let pdf_url = arxiv_id.map(|id| format!("https://arxiv.org/pdf/{}.pdf", id));
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("inspire_hep:{}", ctrl_num),
                 title: clean_html_text(title),
                 authors,
@@ -218,6 +219,7 @@ pub async fn search_datacite(
             let source_url = format!("https://doi.org/{}", doi);
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("datacite:{}", doi),
                 title: clean_html_text(title),
                 authors,
@@ -314,6 +316,7 @@ pub async fn search_econbiz(
             let id_str = hit.get("id").and_then(|i| i.as_str()).unwrap_or("unknown");
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("econbiz:{}", id_str),
                 title: clean_html_text(title),
                 authors,
@@ -410,6 +413,7 @@ pub async fn search_eric(
             let source_url = format!("https://eric.ed.gov/?id={}", eric_id);
 
             papers.push(Paper {
+                biblio: None,
                 id: format!("eric:{}", eric_id),
                 title: clean_html_text(title),
                 authors,

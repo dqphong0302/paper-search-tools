@@ -485,6 +485,35 @@ mod search_settings_tests {
     }
 
     #[tokio::test]
+    async fn fetch_pdf_separates_blocked_landing_pages_and_real_pdfs() {
+        use axum::{http::StatusCode, routing::get as route_get};
+        let app = Router::new()
+            .route("/blocked", route_get(|| async { StatusCode::FORBIDDEN }))
+            .route(
+                "/landing",
+                route_get(|| async { ([("content-type", "text/html")], "<html>login</html>") }),
+            )
+            .route("/paper.pdf", route_get(|| async { "%PDF-1.4\nfixture\n%%EOF" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let client = reqwest::Client::new();
+
+        assert!(matches!(
+            fetch_pdf(&client, &format!("{base}/blocked")).await,
+            Err(PdfFetchError::Blocked(403))
+        ));
+        assert!(matches!(
+            fetch_pdf(&client, &format!("{base}/landing")).await,
+            Err(PdfFetchError::NotPdf(detail)) if detail.contains("web page")
+        ));
+        assert!(fetch_pdf(&client, &format!("{base}/paper.pdf"))
+            .await
+            .is_ok_and(|bytes| bytes.starts_with(b"%PDF")));
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn downloaded_pdf_content_is_served_only_from_recorded_history() {
         let path = std::env::temp_dir().join(format!(
             "scholargate-pdf-content-{}.pdf",
@@ -1401,7 +1430,8 @@ async fn download_handler(
     } else {
         clean_title.trim()
     };
-    let url_hash = content_hash(payload.pdf_url.as_bytes());
+    let hash_key = if payload.pdf_url.trim().is_empty() { &payload.paper_id } else { &payload.pdf_url };
+    let url_hash = content_hash(hash_key.as_bytes());
     let file_name = format!("{}_{}.pdf", title, &url_hash[..8]);
     let target_file = download_dir.join(&file_name);
 
@@ -1411,104 +1441,183 @@ async fn download_handler(
     // configured proxy, and allow far longer than a search: a PDF is a file,
     // not a metadata call.
     let downloader = crate::engine::pooled_client(120, crate::config::outbound_proxy(&state.db).as_deref());
-    match downloader.get(&payload.pdf_url).send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            if !status.is_success() {
-                // Publishers put bot protection in front of many PDF links, so
-                // this is a routine outcome rather than a fault: say so, and let
-                // the caller offer the article page instead of a dead end.
-                let blocked = matches!(status.as_u16(), 401 | 402 | 403 | 429 | 451);
-                return Json(DownloadResponse {
-                    success: false,
-                    local_path: None,
-                    file_size_bytes: None,
-                    blocked,
-                    error: Some(if blocked {
-                        format!(
-                            "The publisher blocked this download (HTTP {}). Open the article page to read it there.",
-                            status.as_u16()
-                        )
-                    } else {
-                        format!("Source returned HTTP {}", status.as_u16())
-                    }),
-                });
-            }
+    let failure = |blocked: bool, error: String| {
+        Json(DownloadResponse {
+            success: false,
+            local_path: None,
+            file_size_bytes: None,
+            blocked,
+            error: Some(error),
+        })
+    };
 
-            let content_type = resp
-                .headers()
-                .get(reqwest::header::CONTENT_TYPE)
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("")
-                .to_lowercase();
-
-            if let Ok(bytes) = resp.bytes().await {
-                // Paywalled links answer 200 with an HTML landing page; writing that to a
-                // .pdf would report a successful download of a file no reader can open.
-                let looks_like_pdf = bytes.starts_with(b"%PDF");
-                if !looks_like_pdf {
-                    let detail = if content_type.contains("html") {
-                        "the source returned a web page (possibly a login or paywall page) instead of a PDF"
-                    } else {
-                        "the downloaded content is not a PDF"
-                    };
-                    return Json(DownloadResponse {
-                        success: false,
-                        local_path: None,
-                        file_size_bytes: None,
-                        blocked: false,
-                        error: Some(format!("Full text could not be downloaded: {}", detail)),
-                    });
-                }
-
-                let file_size = bytes.len() as u64;
-                if std::fs::write(&target_file, bytes).is_ok() {
-                    let now_sec = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-
-                    state.db.add_download_record(&DownloadRecord {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        paper_id: payload.paper_id.clone(),
-                        title: payload.title.clone(),
-                        pdf_url: payload.pdf_url.clone(),
-                        local_path: target_file.to_string_lossy().to_string(),
-                        file_size_bytes: file_size,
-                        source: payload.source.clone(),
-                        year: payload.year,
-                        downloaded_at: now_sec,
-                        workspace_id: payload.workspace_id.clone(),
-                    });
-
-                    return Json(DownloadResponse {
-                        success: true,
-                        local_path: Some(target_file.to_string_lossy().to_string()),
-                        file_size_bytes: Some(file_size),
-                        blocked: false,
-                        error: None,
-                    });
-                }
-            }
+    let mut tried: Vec<String> = Vec::new();
+    let mut first_error: Option<PdfFetchError> = None;
+    let mut fetched: Option<(String, Vec<u8>)> = None;
+    if !payload.pdf_url.trim().is_empty() {
+        let url = payload.pdf_url.trim().to_string();
+        tried.push(url.clone());
+        match fetch_pdf(&downloader, &url).await {
+            Ok(bytes) => fetched = Some((url, bytes)),
+            Err(error) => first_error = Some(error),
         }
-        Err(e) => {
-            return Json(DownloadResponse {
-                success: false,
-                local_path: None,
-                file_size_bytes: None,
-                blocked: false,
-                error: Some(e.to_string()),
-            });
+    }
+    // The advertised link is often behind bot protection while a repository
+    // copy (PMC, arXiv, an institutional archive) is freely downloadable.
+    if fetched.is_none() {
+        if let Some(doi) = payload.doi.as_deref().and_then(crate::details::normalize_doi) {
+            for url in alternate_pdf_urls(&state, &downloader, &doi).await {
+                if tried.contains(&url) {
+                    continue;
+                }
+                tried.push(url.clone());
+                match fetch_pdf(&downloader, &url).await {
+                    Ok(bytes) => {
+                        fetched = Some((url, bytes));
+                        break;
+                    }
+                    Err(error) => {
+                        first_error.get_or_insert(error);
+                    }
+                }
+            }
         }
     }
 
+    let Some((pdf_url, bytes)) = fetched else {
+        return match first_error {
+            Some(PdfFetchError::Blocked(status)) => failure(
+                true,
+                format!(
+                    "The publisher blocked this download (HTTP {status}) and no other open-access copy could be downloaded. Open the article page to read it there."
+                ),
+            ),
+            Some(PdfFetchError::Status(status)) => failure(false, format!("Source returned HTTP {status}")),
+            Some(PdfFetchError::NotPdf(detail)) => {
+                failure(false, format!("Full text could not be downloaded: {detail}"))
+            }
+            Some(PdfFetchError::Network(error)) => failure(false, error),
+            None => failure(false, "No downloadable open-access PDF was found for this paper.".to_string()),
+        };
+    };
+
+    let file_size = bytes.len() as u64;
+    if std::fs::write(&target_file, bytes).is_err() {
+        return failure(false, "Failed to write PDF to disk".to_string());
+    }
+    let now_sec = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    state.db.add_download_record(&DownloadRecord {
+        id: uuid::Uuid::new_v4().to_string(),
+        paper_id: payload.paper_id.clone(),
+        title: payload.title.clone(),
+        pdf_url,
+        local_path: target_file.to_string_lossy().to_string(),
+        file_size_bytes: file_size,
+        source: payload.source.clone(),
+        year: payload.year,
+        downloaded_at: now_sec,
+        workspace_id: payload.workspace_id.clone(),
+    });
     Json(DownloadResponse {
-        success: false,
-        local_path: None,
-        file_size_bytes: None,
+        success: true,
+        local_path: Some(target_file.to_string_lossy().to_string()),
+        file_size_bytes: Some(file_size),
         blocked: false,
-        error: Some("Failed to write PDF to disk".to_string()),
+        error: None,
     })
+}
+
+enum PdfFetchError {
+    /// Publishers put bot protection in front of many PDF links, so this is a
+    /// routine outcome rather than a fault.
+    Blocked(u16),
+    Status(u16),
+    NotPdf(&'static str),
+    Network(String),
+}
+
+async fn fetch_pdf(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, PdfFetchError> {
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| PdfFetchError::Network(e.to_string()))?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(if matches!(status.as_u16(), 401 | 402 | 403 | 429 | 451) {
+            PdfFetchError::Blocked(status.as_u16())
+        } else {
+            PdfFetchError::Status(status.as_u16())
+        });
+    }
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| PdfFetchError::Network(e.to_string()))?;
+    // Paywalled links answer 200 with an HTML landing page; writing that to a
+    // .pdf would report a successful download of a file no reader can open.
+    if !bytes.starts_with(b"%PDF") {
+        return Err(PdfFetchError::NotPdf(if content_type.contains("html") {
+            "the source returned a web page (possibly a login or paywall page) instead of a PDF"
+        } else {
+            "the downloaded content is not a PDF"
+        }));
+    }
+    Ok(bytes.to_vec())
+}
+
+/// Other open-access PDF copies of a DOI, from OpenAlex and (when an email is
+/// configured) Unpaywall, best first.
+async fn alternate_pdf_urls(state: &AppState, client: &reqwest::Client, doi: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    let openalex = format!("https://api.openalex.org/works/https://doi.org/{}", urlencoding::encode(doi));
+    if let Some(json) = get_json(client, &openalex).await {
+        for location in std::iter::once(&json["best_oa_location"])
+            .chain(json["locations"].as_array().into_iter().flatten())
+        {
+            if let Some(url) = location["pdf_url"].as_str().map(str::trim).filter(|u| !u.is_empty()) {
+                urls.push(url.to_string());
+            }
+        }
+    }
+    let creds = state.db.source_credentials();
+    if let Some(email) = crate::models::SourceCredentials::clean(creds.unpaywall_email) {
+        let unpaywall = format!(
+            "https://api.unpaywall.org/v2/{}?email={}",
+            urlencoding::encode(doi),
+            urlencoding::encode(&email)
+        );
+        if let Some(json) = get_json(client, &unpaywall).await {
+            urls.extend(crate::engine::unpaywall_pdf_urls(&json));
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    urls.retain(|url| seen.insert(url.clone()));
+    urls.truncate(6);
+    urls
+}
+
+async fn get_json(client: &reqwest::Client, url: &str) -> Option<serde_json::Value> {
+    client
+        .get(url)
+        .timeout(Duration::from_secs(10))
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()
 }
 
 /// Streams only files recorded by ScholarGate, never an arbitrary caller-supplied path.

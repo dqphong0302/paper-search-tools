@@ -77,6 +77,7 @@ fn crossref_paper(item: &Value) -> Result<Paper, String> {
         })
         .unwrap_or_default();
     Ok(Paper {
+        biblio: crate::engine::crossref_biblio(item),
         id: doi.clone(),
         title: title.to_string(),
         authors,

@@ -748,7 +748,7 @@ impl AcademicEngine {
 
                     let mut authors = Vec::new();
                     if let Some(auth_list) = item.get("authors").and_then(|a| a.as_array()) {
-                        for a in auth_list.iter().take(5) {
+                        for a in auth_list.iter().take(crate::models::MAX_AUTHORS) {
                             if let Some(name) = a.get("name").and_then(|n| n.as_str()) {
                                 authors.push(name.to_string());
                             }
@@ -788,6 +788,19 @@ impl AcademicEngine {
                     let is_oa = false;
 
                     papers.push(Paper {
+                        biblio: {
+                            let text = |key: &str| {
+                                item[key].as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string)
+                            };
+                            crate::models::Biblio {
+                                volume: text("volume"),
+                                issue: text("issue"),
+                                pages: text("pages"),
+                                issn: text("issn").or_else(|| text("essn")),
+                                ..Default::default()
+                            }
+                            .non_empty()
+                        },
                         id: format!("pmid:{}", pmid),
                         title: title.to_string(),
                         authors,
@@ -898,7 +911,7 @@ impl AcademicEngine {
 
                 let mut authors = Vec::new();
                 if let Some(auth_list) = item.get("author").and_then(|a| a.as_array()) {
-                    for a in auth_list.iter().take(5) {
+                    for a in auth_list.iter().take(crate::models::MAX_AUTHORS) {
                         let given = a.get("given").and_then(|v| v.as_str()).unwrap_or("");
                         let family = a.get("family").and_then(|v| v.as_str()).unwrap_or("");
                         if !family.is_empty() {
@@ -922,6 +935,7 @@ impl AcademicEngine {
                 let is_oa = pdf_url.is_some();
 
                 papers.push(Paper {
+                    biblio: crossref_biblio(item),
                     id: doi.clone().unwrap_or_else(|| title.to_string()),
                     title: title.to_string(),
                     authors,
@@ -990,7 +1004,7 @@ impl AcademicEngine {
                     .map(|list| {
                         list.iter()
                             .filter_map(|author| author.get("name").and_then(|v| v.as_str()))
-                            .take(5)
+                            .take(crate::models::MAX_AUTHORS)
                             .map(str::to_string)
                             .collect::<Vec<_>>()
                     })
@@ -1011,6 +1025,7 @@ impl AcademicEngine {
                 let open_access = pdf_url.is_some();
 
                 papers.push(Paper {
+                    biblio: None,
                     id: if paper_id.is_empty() {
                         doi.clone().unwrap_or_else(|| title.to_string())
                     } else {
@@ -1082,7 +1097,7 @@ impl AcademicEngine {
                     .map(|list| {
                         list.iter()
                             .filter_map(|author| author.get("name").and_then(|v| v.as_str()))
-                            .take(5)
+                            .take(crate::models::MAX_AUTHORS)
                             .map(str::to_string)
                             .collect::<Vec<_>>()
                     })
@@ -1125,6 +1140,7 @@ impl AcademicEngine {
                         })
                     });
                 papers.push(Paper {
+                    biblio: None,
                     id: format!("doaj:{id}"),
                     title: title.to_string(),
                     authors,
@@ -1192,7 +1208,7 @@ impl AcademicEngine {
                     .map(|list| {
                         list.iter()
                             .filter_map(|creator| creator.get("name").and_then(|v| v.as_str()))
-                            .take(5)
+                            .take(crate::models::MAX_AUTHORS)
                             .map(str::to_string)
                             .collect::<Vec<_>>()
                     })
@@ -1228,6 +1244,7 @@ impl AcademicEngine {
                     .map(str::to_string)
                     .or_else(|| record_id.map(|id| format!("https://zenodo.org/records/{id}")));
                 papers.push(Paper {
+                    biblio: None,
                     id: record_id
                         .map(|id| format!("zenodo:{id}"))
                         .unwrap_or_else(|| title.to_string()),
@@ -1306,7 +1323,7 @@ impl AcademicEngine {
                     Some(serde_json::Value::Array(list)) => list
                         .iter()
                         .filter_map(|v| v.as_str())
-                        .take(5)
+                        .take(crate::models::MAX_AUTHORS)
                         .map(str::to_string)
                         .collect::<Vec<_>>(),
                     Some(serde_json::Value::String(name)) => vec![name.clone()],
@@ -1317,6 +1334,7 @@ impl AcademicEngine {
                 let pdf_url =
                     field("fileMain_s").filter(|url| url.to_lowercase().ends_with(".pdf"));
                 papers.push(Paper {
+                    biblio: None,
                     id: format!("hal:{}", hal_id.clone().unwrap_or_else(|| title.clone())),
                     title,
                     authors,
@@ -1542,7 +1560,7 @@ impl AcademicEngine {
                             .filter_map(|author| {
                                 author.get("fullName").and_then(|value| value.as_str())
                             })
-                            .take(5)
+                            .take(crate::models::MAX_AUTHORS)
                             .map(str::to_string)
                             .collect::<Vec<_>>()
                     })
@@ -1581,6 +1599,25 @@ impl AcademicEngine {
                     .is_some_and(|value| value == "Y");
 
                 papers.push(Paper {
+                    biblio: {
+                        let text = |value: &serde_json::Value| {
+                            value.as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string)
+                        };
+                        let journal = &item["journalInfo"];
+                        crate::models::Biblio {
+                            volume: text(&journal["volume"]),
+                            issue: text(&journal["issue"]),
+                            pages: text(&item["pageInfo"]),
+                            issn: text(&journal["journal"]["issn"])
+                                .or_else(|| text(&journal["journal"]["essn"])),
+                            keywords: item["keywordList"]["keyword"]
+                                .as_array()
+                                .map(|list| list.iter().filter_map(text).collect())
+                                .unwrap_or_default(),
+                            ..Default::default()
+                        }
+                        .non_empty()
+                    },
                     id: format!("epmc:{}:{}", source_id, external_id),
                     title: title.to_string(),
                     authors,
@@ -1712,6 +1749,7 @@ impl AcademicEngine {
                     .map(|s| s.to_string());
 
                 papers.push(Paper {
+                    biblio: None,
                     id,
                     title,
                     authors: vec!["SearXNG Federated".to_string()],
@@ -1783,7 +1821,7 @@ pub(crate) fn openalex_paper(item: &serde_json::Value, id_prefix: &str, source: 
         .and_then(|a| a.as_array())
         .map(|list| {
             list.iter()
-                .take(5)
+                .take(crate::models::MAX_AUTHORS)
                 .filter_map(|a| {
                     a.get("author")
                         .and_then(|au| au.get("display_name"))
@@ -1794,8 +1832,26 @@ pub(crate) fn openalex_paper(item: &serde_json::Value, id_prefix: &str, source: 
         })
         .unwrap_or_default();
     let abstract_text = reconstruct_abstract(item.get("abstract_inverted_index"));
+    let text = |value: &serde_json::Value| value.as_str().map(str::to_string);
+    let source_meta = &item["primary_location"]["source"];
+    let biblio = crate::models::Biblio {
+        volume: text(&item["biblio"]["volume"]),
+        issue: text(&item["biblio"]["issue"]),
+        pages: crate::models::page_range(
+            item["biblio"]["first_page"].as_str(),
+            item["biblio"]["last_page"].as_str(),
+        ),
+        issn: text(&source_meta["issn_l"]),
+        publisher: text(&source_meta["host_organization_name"]),
+        keywords: item["keywords"]
+            .as_array()
+            .map(|list| list.iter().filter_map(|k| text(&k["display_name"])).collect())
+            .unwrap_or_default(),
+    }
+    .non_empty();
 
     Paper {
+        biblio,
         id: format!("{id_prefix}{raw_id}"),
         title: title.to_string(),
         authors,
@@ -1844,6 +1900,30 @@ fn merge_paper_metadata(target: &mut Paper, other: Paper) {
     if target.authors.is_empty() {
         target.authors = other.authors;
     }
+    match (&mut target.biblio, other.biblio) {
+        (Some(mine), Some(theirs)) => mine.fill_from(theirs),
+        (slot @ None, theirs) => *slot = theirs,
+        _ => {}
+    }
+}
+
+/// Crossref's volume/issue/page/ISSN/publisher/subject, shared by search and DOI lookup.
+pub(crate) fn crossref_biblio(item: &serde_json::Value) -> Option<crate::models::Biblio> {
+    let text = |value: &serde_json::Value| {
+        value.as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_string)
+    };
+    crate::models::Biblio {
+        volume: text(&item["volume"]),
+        issue: text(&item["issue"]),
+        pages: text(&item["page"]).or_else(|| text(&item["article-number"])),
+        issn: text(&item["ISSN"][0]),
+        publisher: text(&item["publisher"]),
+        keywords: item["subject"]
+            .as_array()
+            .map(|list| list.iter().filter_map(text).collect())
+            .unwrap_or_default(),
+    }
+    .non_empty()
 }
 
 fn normalize_paper_key(paper: &Paper) -> String {
@@ -1891,15 +1971,20 @@ fn reconstruct_abstract(val: Option<&serde_json::Value>) -> Option<String> {
 /// The best location often has only a landing page while a repository copy
 /// (PMC, arXiv, an institutional archive) carries the PDF, so fall back to
 /// the other open-access locations before giving up.
-fn unpaywall_pdf_url(json: &serde_json::Value) -> Option<String> {
+pub(crate) fn unpaywall_pdf_urls(json: &serde_json::Value) -> Vec<String> {
     let others = json.get("oa_locations").and_then(|v| v.as_array());
     std::iter::once(json.get("best_oa_location"))
         .chain(others.into_iter().flatten().map(Some))
         .flatten()
         .filter_map(|location| location.get("url_for_pdf")?.as_str())
         .map(str::trim)
-        .find(|url| !url.is_empty())
+        .filter(|url| !url.is_empty())
         .map(str::to_string)
+        .collect()
+}
+
+fn unpaywall_pdf_url(json: &serde_json::Value) -> Option<String> {
+    unpaywall_pdf_urls(json).into_iter().next()
 }
 
 fn extract_xml_tag(xml: &str, tag: &str) -> Option<String> {
@@ -2036,6 +2121,7 @@ fn parse_arxiv_feed(xml_text: &str) -> Result<Vec<Paper>, String> {
         };
 
         papers.push(Paper {
+            biblio: None,
             id: id.clone(),
             title,
             authors,
@@ -2555,7 +2641,52 @@ mod tests {
             source: source.to_string(),
             score: None,
             open_access: false,
+            biblio: None,
         }
+    }
+
+    #[test]
+    fn merge_fills_missing_bibliographic_fields() {
+        let mut winner = paper("OpenAlex", "10.1/abc");
+        winner.biblio = Some(crate::models::Biblio {
+            volume: Some("12".into()),
+            ..Default::default()
+        });
+        let mut other = paper("Crossref", "10.1/abc");
+        other.biblio = Some(crate::models::Biblio {
+            volume: Some("99".into()),
+            pages: Some("1-9".into()),
+            ..Default::default()
+        });
+        merge_paper_metadata(&mut winner, other);
+        let biblio = winner.biblio.unwrap();
+        assert_eq!(biblio.volume.as_deref(), Some("12"));
+        assert_eq!(biblio.pages.as_deref(), Some("1-9"));
+    }
+
+    #[test]
+    fn openalex_and_crossref_expose_volume_issue_and_pages() {
+        let openalex = openalex_paper(
+            &serde_json::json!({
+                "id": "https://openalex.org/W1", "title": "T",
+                "biblio": {"volume": "5", "issue": "2", "first_page": "10", "last_page": "20"},
+                "primary_location": {"source": {"issn_l": "1234-5678", "host_organization_name": "Elsevier"}}
+            }),
+            "",
+            "OpenAlex",
+        );
+        let biblio = openalex.biblio.unwrap();
+        assert_eq!(biblio.pages.as_deref(), Some("10-20"));
+        assert_eq!(biblio.issn.as_deref(), Some("1234-5678"));
+        assert_eq!(biblio.publisher.as_deref(), Some("Elsevier"));
+
+        let crossref = crossref_biblio(&serde_json::json!({
+            "volume": "7", "issue": "1", "page": "e123", "ISSN": ["1111-2222"], "publisher": "PLOS"
+        }))
+        .unwrap();
+        assert_eq!(crossref.volume.as_deref(), Some("7"));
+        assert_eq!(crossref.pages.as_deref(), Some("e123"));
+        assert!(crossref_biblio(&serde_json::json!({})).is_none());
     }
 
     #[test]

@@ -20,7 +20,67 @@ pub struct Paper {
     pub source: String,
     pub score: Option<f64>,
     pub open_access: bool,
+    /// Volume/issue/pages/ISSN/publisher/keywords for reference-manager export.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub biblio: Option<Biblio>,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Biblio {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volume: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue: Option<String>,
+    /// "123-130" or a single article number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pages: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issn: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publisher: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keywords: Vec<String>,
+}
+
+impl Biblio {
+    /// None when nothing was found, so records without metadata stay compact.
+    pub fn non_empty(self) -> Option<Self> {
+        (self != Self::default()).then_some(self)
+    }
+
+    /// Fill each missing field from a duplicate record of the same paper.
+    pub fn fill_from(&mut self, other: Biblio) {
+        fn fill(slot: &mut Option<String>, value: Option<String>) {
+            if slot.is_none() {
+                *slot = value;
+            }
+        }
+        fill(&mut self.volume, other.volume);
+        fill(&mut self.issue, other.issue);
+        fill(&mut self.pages, other.pages);
+        fill(&mut self.issn, other.issn);
+        fill(&mut self.publisher, other.publisher);
+        if self.keywords.is_empty() {
+            self.keywords = other.keywords;
+        }
+    }
+}
+
+/// Joins a first and last page into "first-last", tolerating either being absent.
+pub fn page_range(first: Option<&str>, last: Option<&str>) -> Option<String> {
+    let first = first.map(str::trim).filter(|v| !v.is_empty());
+    let last = last.map(str::trim).filter(|v| !v.is_empty());
+    match (first, last) {
+        (Some(f), Some(l)) if f != l => Some(format!("{f}-{l}")),
+        (Some(f), _) => Some(f.to_string()),
+        (None, Some(l)) => Some(l.to_string()),
+        (None, None) => None,
+    }
+}
+
+/// Upper bound on authors kept per record: enough for any citation style and
+/// reference manager, without letting a 3,000-author physics paper bloat results.
+pub const MAX_AUTHORS: usize = 100;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchRequest {
@@ -204,7 +264,12 @@ pub struct TelemetryStats {
 pub struct DownloadRequest {
     pub paper_id: String,
     pub title: String,
+    /// May be empty when only a DOI is known; open-access copies are then looked up.
+    #[serde(default)]
     pub pdf_url: String,
+    /// Lets the gateway try other open-access copies when `pdf_url` is blocked.
+    #[serde(default)]
+    pub doi: Option<String>,
     pub source: Option<String>,
     pub year: Option<u32>,
     #[serde(default)]
