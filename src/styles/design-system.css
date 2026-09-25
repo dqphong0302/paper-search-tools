@@ -1976,3 +1976,58 @@ a.action-btn:hover {
 .workspace-switcher-error { font-size: 11px; color: var(--status-rose); }
 .workspace-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .workspace-actions input { font-size: 12px; padding: 5px 8px; border: 1px solid var(--cockpit-border); border-radius: var(--radius-md); background: var(--cockpit-card); color: var(--text-main); }
+
+/* Layout utilities — prefer these over inline style objects. */
+.u-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.u-between { justify-content: space-between; }
+.u-stack { display: flex; flex-direction: column; gap: 12px; }
+.u-gap-4 { gap: 4px; }
+.u-gap-6 { gap: 6px; }
+.u-gap-10 { gap: 10px; }
+.u-gap-12 { gap: 12px; }
+.u-gap-14 { gap: 14px; }
+.u-self-start { align-self: flex-start; justify-self: start; }
+.text-sm { font-size: 12px; }
+.text-xs { font-size: 11.5px; }
+.icon-accent { color: var(--primary-cyan); flex-shrink: 0; }
+.eyebrow-label { font-size: 11.5px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; }
+.eyebrow-xs { font-size: 11px; font-weight: 600; }
+.inline-label { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.check-label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.check-label input { accent-color: var(--primary-cyan); }
+.divider-v { width: 1px; height: 16px; background: var(--cockpit-border); margin: 0 4px; }
+.mono-dim { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+.action-btn-sm { font-size: 12px; padding: 5px 12px; }
+.action-btn-xs { font-size: 11px; padding: 3px 10px; }
+a.action-btn { text-decoration: none; }
+.field-sm { width: auto; font-size: 12px; padding: 4px 8px; }
+.field-scope { max-width: 220px; padding: 5px 10px; }
+.field-year { width: 68px; font-size: 11.5px; padding: 4px 6px; }
+.field-limit { width: 56px; text-align: center; }
+.field-operator { width: 80px; }
+.field-grow { flex: 1; min-width: 190px; }
+
+/* Explorer */
+.scope-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; background: var(--cockpit-card); border: 1px solid var(--cockpit-border); border-radius: var(--radius-md); }
+.scope-bar .quick-pill-row { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; overflow-x: auto; flex: 1; min-width: 0; }
+.mesh-builder { border: 1px solid var(--cockpit-border); border-radius: 10px; padding: 14px; }
+.mesh-builder h2 { margin: 0; font-size: 14px; }
+.mesh-builder p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; }
+.mesh-builder .check-label { font-size: 12px; }
+.mesh-groups { display: grid; gap: 8px; margin-top: 12px; }
+.mesh-row { display: grid; grid-template-columns: minmax(180px, 1fr) 170px auto; gap: 8px; }
+.mesh-controls { margin-top: 8px; }
+.mesh-output { margin-top: 10px; display: grid; gap: 8px; }
+.mesh-modes { gap: 6px; font-size: 11px; }
+.mesh-preview { white-space: pre-wrap; overflow-wrap: anywhere; padding: 10px; border-radius: 8px; background: var(--cockpit-card); }
+.result-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--cockpit-border); padding-bottom: 12px; }
+.result-toolbar-controls { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+.selection-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border: 1px solid var(--cockpit-border); border-radius: var(--radius-sm); background: var(--cockpit-card); font-size: 12px; }
+.selection-bar .action-btn { padding: 4px 10px; }
+.selection-bar .check-label { gap: 8px; }
+.selection-count { color: var(--primary-cyan); font-weight: 600; }
+.source-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 11px; border: 1px solid; }
+.source-chip b { font-family: var(--font-mono); }
+.source-chip.ok { color: var(--status-emerald); background: var(--status-emerald-bg); border-color: var(--status-emerald-border); }
+.source-chip.fail { color: var(--status-rose); background: var(--status-rose-bg); border-color: var(--status-rose-border); }
+.skeleton-card { padding: 16px; opacity: 0.6; display: flex; flex-direction: column; gap: 9px; }

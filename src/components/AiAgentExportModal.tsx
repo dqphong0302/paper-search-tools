@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Paper } from '../types';
 import { bibtexCitation, bibtexLibrary, risLibrary } from '../lib/citation';
+import { downloadTextFile } from '../lib/download';
 
 export type TargetAgent = 'antigravity' | 'codex' | 'claude' | 'opencode' | 'obsidian';
 export type ExportFormat = 'prompt_pack' | 'obsidian_note' | 'bibtex' | 'ris' | 'json';
@@ -238,15 +239,7 @@ export const AiAgentExportModal: React.FC<AiAgentExportModalProps> = ({
       ? `research_pack_${workspaceName.replace(/\s+/g, '_').toLowerCase()}.${ext}`
       : `paper_${(papers[0].doi || papers[0].id).replace(/[^a-zA-Z0-9]/g, '_')}.${ext}`;
 
-    const blob = new Blob([generatedContent], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadTextFile(generatedContent, filename, mime);
 
     setDownloaded(true);
     setTimeout(() => setDownloaded(false), 2000);

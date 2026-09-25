@@ -26,6 +26,7 @@ import { FulltextViewerModal } from './FulltextViewerModal';
 import { AiAgentExportModal } from './AiAgentExportModal';
 import { canDownloadPdf, requestPdfDownload } from '../lib/pdfDownload';
 import { useWorkspace } from '../state/WorkspaceContext';
+import { downloadTextFile } from '../lib/download';
 
 const ABSTRACT_CLAMP = 280;
 
@@ -84,17 +85,8 @@ export const Library: React.FC<LibraryProps> = ({
     triggerRef.current?.focus();
   };
 
-  const download = (content: string, extension: string, mime: string, name?: string) => {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${name ?? `scholargate_${new Date().toISOString().slice(0, 10)}`}.${extension}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
+  const download = (content: string, extension: string, mime: string, name?: string) =>
+    downloadTextFile(content, `${name ?? `scholargate_${new Date().toISOString().slice(0, 10)}`}.${extension}`, mime);
 
   // One reference, named after the paper rather than the date, so a folder of
   // single exports stays readable.

@@ -3,6 +3,7 @@ import { Check, ChevronLeft, ChevronRight, Copy, FileDown, Loader2, Search, X, Z
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { gatewayFetch } from '../lib/gateway';
+import { downloadTextFile } from '../lib/download';
 
 interface PdfDocument {
   id: string;
@@ -97,13 +98,11 @@ export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: (
 
   const extractedMarkdown = useMemo(() => pageText.map((text, index) => `## Page ${index + 1}\n\n${text || '*No extractable text*'}`).join('\n\n'), [pageText]);
   const saveExtraction = () => {
-    const blob = new Blob([`# ${document?.title ?? 'PDF'}\n\n${extractedMarkdown}\n`], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = window.document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${(document?.title ?? 'document').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'document'}-extracted.md`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadTextFile(
+      `# ${document?.title ?? 'PDF'}\n\n${extractedMarkdown}\n`,
+      `${(document?.title ?? 'document').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 70) || 'document'}-extracted.md`,
+      'text/markdown;charset=utf-8',
+    );
   };
 
   if (!document) return null;
