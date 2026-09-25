@@ -21,8 +21,8 @@ export const AgentGateway: React.FC<AgentGatewayProps> = ({ telemetry, isOnline,
   ];
 
   return (
-    <div className="page-container" style={{ gap: 14 }}>
-      <div role="tablist" aria-label="Agent Gateway" className="segmented" style={{ alignSelf: 'flex-start' }}>
+    <div className="page-container u-gap-14">
+      <div role="tablist" aria-label="Agent Gateway" className="segmented u-self-start">
         {tabs.map((tab) => (
           <button
             key={tab.id}

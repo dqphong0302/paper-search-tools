@@ -68,11 +68,11 @@ export const ResearchGapPanel: React.FC<ResearchGapPanelProps> = ({ query, paper
 
           {analysis.landscape.total > 0 && (
             <div className="gap-subpanel">
-              <div className="gap-eyebrow" style={{ marginBottom: 10 }}>
+              <div className="gap-eyebrow mb-10">
                 <TrendingUp size={13} /> RESULT SET LANDSCAPE (Descriptive only, not evidence of field gaps)
               </div>
 
-              <div className="gap-metric-row gap-metric-row-4" style={{ marginBottom: 12 }}>
+              <div className="gap-metric-row gap-metric-row-4 mb-12">
                 <div><span>Reporting Sources</span><strong>{analysis.landscape.sources.length}</strong></div>
                 <div><span>Distinct Venues</span><strong>{analysis.landscape.venues.length}</strong></div>
                 <div><span>Distinct Authors</span><strong>{analysis.landscape.distinctAuthors}</strong></div>

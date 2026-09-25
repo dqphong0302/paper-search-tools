@@ -209,7 +209,7 @@ export const Library: React.FC<LibraryProps> = ({
       <div className="page-header" style={{ flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h2 className="page-title">
-            <Bookmark size={17} style={{ color: 'var(--primary-cyan)' }} />
+            <Bookmark size={17} className="text-accent" />
             <span>
               {workspacePapers.length} papers of interest
             </span>
@@ -217,7 +217,7 @@ export const Library: React.FC<LibraryProps> = ({
         </div>
 
         {workspacePapers.length > 0 && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div className="u-wrap">
             <button
               type="button"
               className="action-btn action-btn-primary"
@@ -284,7 +284,7 @@ export const Library: React.FC<LibraryProps> = ({
       )}
 
       {workspacePapers.length > 0 && (
-        <div className="segmented" style={{ alignSelf: 'flex-start' }} role="tablist">
+        <div className="segmented u-self-start" role="tablist">
           {filters
             .filter((item) => item.id === 'all' || item.count > 0 || filter === item.id)
             .map((item) => (
@@ -342,12 +342,12 @@ export const Library: React.FC<LibraryProps> = ({
               <button type="button" className="action-btn" onClick={selection.clear} style={{ padding: '4px 10px' }}>
                 Clear selection
               </button>
-              <span style={{ color: 'var(--text-dim)' }}>
+              <span className="text-dim">
                 Export buttons above apply to the selection.
               </span>
             </>
           ) : (
-            <span style={{ color: 'var(--text-dim)' }}>
+            <span className="text-dim">
               Tick papers to export just those; with none ticked the export covers the whole library.
             </span>
           )}
@@ -393,7 +393,7 @@ export const Library: React.FC<LibraryProps> = ({
                     aria-label={`Select ${paper.title}`}
                     style={{ accentColor: 'var(--primary-cyan)', marginTop: 4, flexShrink: 0 }}
                   />
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="u-grow">
                     <div className="paper-badges">
                       <span className="badge badge-source badge-essential">{paper.source}</span>
                       {getPaperKind(paper) !== 'article' && KIND_META[getPaperKind(paper)].badge && (
@@ -533,9 +533,8 @@ export const Library: React.FC<LibraryProps> = ({
                             key={meta.id}
                             type="button"
                             aria-pressed={status === meta.id}
-                            className={`segmented-item ${status === meta.id ? 'active' : ''}`}
+                            className={`segmented-item ${status === meta.id ? 'active' : ''} text-11`}
                             onClick={() => onUpdatePaper(paper.id, { status: meta.id })}
-                            style={{ fontSize: 11 }}
                           >
                             {meta.icon}
                             <span>{meta.label}</span>
@@ -587,7 +586,7 @@ export const Library: React.FC<LibraryProps> = ({
                     </div>
 
                     {/* Note */}
-                    <div style={{ marginBottom: 12 }}>
+                    <div className="mb-12">
                       <button
                         type="button"
                         className="action-btn"
@@ -607,7 +606,7 @@ export const Library: React.FC<LibraryProps> = ({
                             value={noteValue(wp)}
                             onChange={(e) => setNoteDrafts((p) => ({ ...p, [paper.id]: e.target.value }))}
                           />
-                          <div style={{ display: 'flex', gap: 8 }}>
+                          <div className="u-flex">
                             <button
                               type="button"
                               className="action-btn action-btn-primary"
@@ -622,7 +621,7 @@ export const Library: React.FC<LibraryProps> = ({
                     </div>
 
                     <div className="paper-actions">
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <div className="u-wrap">
                         <button
                           type="button"
                           className="action-btn action-btn-primary"

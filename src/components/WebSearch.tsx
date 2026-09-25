@@ -48,9 +48,9 @@ export const WebSearch: React.FC = () => {
     {error && <div className="alert alert-warning" role="alert">{error}</div>}
     {data && <div>
       <p role="status" style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>{data.results.length} results for “{data.query}” · {data.elapsed_ms} ms</p>
-      {data.warnings.length > 0 && <p role="alert" className="alert alert-warning" style={{ marginBottom: 12 }}>Some upstream search engines timed out; coverage may be partial.</p>}
+      {data.warnings.length > 0 && <p role="alert" className="alert alert-warning mb-12">Some upstream search engines timed out; coverage may be partial.</p>}
       {data.results.map((item) => <article key={item.url} style={{ paddingBlock: 16, borderBottom: '1px solid var(--cockpit-border)' }}>
-        <h3 style={{ fontSize: 15, marginBottom: 4 }}><a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-cyan)', textDecoration: 'none' }}>{item.title}</a></h3>
+        <h3 style={{ fontSize: 15, marginBottom: 4 }}><a href={item.url} target="_blank" rel="noopener noreferrer" className="text-accent no-underline">{item.title}</a></h3>
         <p style={{ overflowWrap: 'anywhere', fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>{item.url}</p>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 6 }}>{item.snippet}</p>
         <small style={{ fontSize: 11, color: 'var(--text-dim)' }}>Source: SearXNG{item.engines.length > 0 ? ` / ${item.engines.join(', ')}` : ''}</small>

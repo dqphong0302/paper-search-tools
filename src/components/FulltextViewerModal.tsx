@@ -111,7 +111,7 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
             <BookOpen size={20} style={{ color: 'var(--primary-cyan)', flexShrink: 0 }} />
-            <div style={{ minWidth: 0 }}>
+            <div className="min-w-0">
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--primary-cyan)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Fulltext & Paper Reader
               </div>
@@ -151,9 +151,8 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
             {onToggleFavorite && (
               <button
                 type="button"
-                className={`action-btn ${isFavorite ? 'action-btn-primary' : ''}`}
+                className={`action-btn ${isFavorite ? 'action-btn-primary' : ''} text-sm`}
                 onClick={() => onToggleFavorite(paper)}
-                style={{ fontSize: 12 }}
               >
                 <Star size={13} fill={isFavorite ? '#f59e0b' : 'none'} color={isFavorite ? '#f59e0b' : undefined} />
                 <span>{isFavorite ? 'Favourite' : 'Add to favourites'}</span>
@@ -163,9 +162,8 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
             {onSavePaper && (
               <button
                 type="button"
-                className={`action-btn ${isSaved ? 'action-btn-primary' : ''}`}
+                className={`action-btn ${isSaved ? 'action-btn-primary' : ''} text-sm`}
                 onClick={() => onSavePaper(paper)}
-                style={{ fontSize: 12 }}
               >
                 <Bookmark size={13} fill={isSaved ? '#ffffff' : 'none'} />
                 <span>{isSaved ? 'In interest list' : 'Add to interest list'}</span>
@@ -174,9 +172,8 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
 
             <button
               type="button"
-              className="action-btn"
+              className="action-btn text-sm"
               onClick={() => copyToClipboard(apaCitation(paper), 'apa')}
-              style={{ fontSize: 12 }}
             >
               {copiedFormat === 'apa' ? <Check size={13} color="var(--status-emerald)" /> : <Copy size={13} />}
               <span>{copiedFormat === 'apa' ? 'APA copied' : 'Copy APA'}</span>
@@ -184,9 +181,8 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
 
             <button
               type="button"
-              className="action-btn"
+              className="action-btn text-sm"
               onClick={() => copyToClipboard(bibtexCitation(paper), 'bibtex')}
-              style={{ fontSize: 12 }}
             >
               {copiedFormat === 'bibtex' ? <Check size={13} color="var(--status-emerald)" /> : <Copy size={13} />}
               <span>{copiedFormat === 'bibtex' ? 'BibTeX copied' : 'Copy BibTeX'}</span>
@@ -194,9 +190,8 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
 
             <button
               type="button"
-              className="action-btn"
+              className="action-btn text-sm"
               onClick={() => copyToClipboard(generateMarkdownSummary(), 'markdown')}
-              style={{ fontSize: 12 }}
             >
               {copiedFormat === 'markdown' ? <Check size={13} color="var(--status-emerald)" /> : <Share2 size={13} />}
               <span>{copiedFormat === 'markdown' ? 'Markdown copied' : 'Copy Markdown'}</span>
@@ -220,10 +215,9 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
             {canDownloadPdf(paper) && onDownloadPdf && (
               <button
                 type="button"
-                className="action-btn action-btn-primary"
+                className="action-btn action-btn-primary text-sm"
                 onClick={() => onDownloadPdf(paper)}
                 disabled={isDownloadingPdf || isDownloadedPdf}
-                style={{ fontSize: 12 }}
               >
                 {isDownloadedPdf ? <Check size={13} /> : <Download size={13} />}
                 <span>
@@ -237,7 +231,7 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
         {/* Scrollable Content Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           {/* Metadata Header Box */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="u-stack u-gap-10">
             <div className="paper-badges" style={{ flexWrap: 'wrap' }}>
               <span className="badge badge-source badge-essential">{paper.source}</span>
               {kind !== 'article' && KIND_META[kind].badge && (
@@ -277,26 +271,26 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
                 fontSize: 12.5,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <Users size={15} style={{ color: 'var(--primary-cyan)', marginTop: 2, flexShrink: 0 }} />
+              <div className="u-flex u-align-start">
+                <Users size={15} className="text-accent icon-offset-2" />
                 <div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-dim)', fontSize: 11 }}>AUTHORS</div>
+                  <div className="eyebrow-xs text-dim">AUTHORS</div>
                   <div style={{ color: 'var(--text-main)' }}>{paper.authors.join(', ') || 'Unknown'}</div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <Building size={15} style={{ color: 'var(--primary-cyan)', marginTop: 2, flexShrink: 0 }} />
+              <div className="u-flex u-align-start">
+                <Building size={15} className="text-accent icon-offset-2" />
                 <div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-dim)', fontSize: 11 }}>JOURNAL / VENUE</div>
+                  <div className="eyebrow-xs text-dim">JOURNAL / VENUE</div>
                   <div style={{ color: 'var(--text-main)', fontStyle: 'italic' }}>{paper.venue || 'N/A'}</div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                <Calendar size={15} style={{ color: 'var(--primary-cyan)', marginTop: 2, flexShrink: 0 }} />
+              <div className="u-flex u-align-start">
+                <Calendar size={15} className="text-accent icon-offset-2" />
                 <div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-dim)', fontSize: 11 }}>PUBLICATION YEAR & CITATIONS</div>
+                  <div className="eyebrow-xs text-dim">PUBLICATION YEAR & CITATIONS</div>
                   <div style={{ color: 'var(--text-main)' }}>
                     {paper.year || 'N/A'} • Citations: <b>{paper.citations ?? 'N/A'}</b>
                   </div>
@@ -304,16 +298,16 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
               </div>
 
               {paper.doi && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <Hash size={15} style={{ color: 'var(--primary-cyan)', marginTop: 2, flexShrink: 0 }} />
+                <div className="u-flex u-align-start">
+                  <Hash size={15} className="text-accent icon-offset-2" />
                   <div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-dim)', fontSize: 11 }}>DOI / IDENTIFIER</div>
+                    <div className="eyebrow-xs text-dim">DOI / IDENTIFIER</div>
                     <div>
                       <a
                         href={`https://doi.org/${paper.doi}`}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: 'var(--primary-cyan)', textDecoration: 'none' }}
+                        className="text-accent no-underline"
                       >
                         {paper.doi}
                       </a>
@@ -327,7 +321,7 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
           {/* Abstract / Full Text Section */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
-              <FileText size={16} style={{ color: 'var(--primary-cyan)' }} />
+              <FileText size={16} className="text-accent" />
               <span>Abstract & full-text brief</span>
             </div>
 
@@ -345,7 +339,7 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
             >
               {paper.abstract ? (
                 paper.abstract.split('\n\n').map((para, i) => (
-                  <p key={i} style={{ marginBottom: 12 }}>
+                  <p key={i} className="mb-12">
                     {para}
                   </p>
                 ))

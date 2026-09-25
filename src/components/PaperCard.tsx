@@ -135,7 +135,7 @@ function PaperCardImpl({
                     href={`https://doi.org/${paper.doi}`}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ color: 'var(--primary-cyan)', textDecoration: 'none' }}
+                    className="text-accent no-underline"
                   >
                     {paper.doi}
                   </a>
@@ -143,7 +143,7 @@ function PaperCardImpl({
               )}
             </div>
 
-            <p className="paper-abstract" style={{ margin: 0 }}>
+            <p className="paper-abstract m-0">
               <b>Abstract: </b>
               {abstract
                 ? `${abstract.slice(0, 240).trimEnd()}${abstract.length > 240 ? '…' : ''}`
@@ -320,7 +320,7 @@ function PaperCardImpl({
             </details>
 
             <div className="paper-actions">
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div className="u-wrap">
                 <button
                   type="button"
                   className="action-btn action-btn-primary"
@@ -409,9 +409,8 @@ function PaperCardImpl({
                       aria-selected={citationState?.direction === id}
                       className={`segmented-item ${
                         citationState?.direction === id ? 'active' : ''
-                      }`}
+                      } text-11`}
                       onClick={() => onLoadCitations(paper, id)}
-                      style={{ fontSize: 11 }}
                     >
                       {label}
                     </button>
@@ -419,19 +418,19 @@ function PaperCardImpl({
                 </div>
 
                 {citationState?.loading && (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  <div className="text-sm text-muted">
                     Loading the citation graph from OpenAlex…
                   </div>
                 )}
                 {citationState?.error && (
-                  <div className="alert alert-warning" style={{ margin: 0 }}>
+                  <div className="alert alert-warning m-0">
                     {citationState?.error}
                   </div>
                 )}
                 {!citationState?.loading &&
                   !citationState?.error &&
                   (citationState?.items.length ?? 0) === 0 && (
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    <div className="text-sm text-muted">
                       No citation-graph data found (requires a DOI, PMID or OpenAlex ID).
                     </div>
                   )}
@@ -447,7 +446,7 @@ function PaperCardImpl({
                       borderBottom: '1px solid var(--cockpit-border)',
                     }}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="u-grow">
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-main)' }}>
                         {item.title}
                       </div>

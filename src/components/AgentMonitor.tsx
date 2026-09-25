@@ -126,7 +126,7 @@ for p in papers:
             >
               {m.label}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="u-flex u-center">
               {m.dot && (
                 <span
                   className="pulse-dot"
@@ -153,7 +153,7 @@ for p in papers:
             }}
           >
             <div className="cockpit-card-title">
-              <Activity size={15} style={{ color: 'var(--primary-cyan)' }} />
+              <Activity size={15} className="text-accent" />
               <span>Real-time Telemetry & Query Logs</span>
             </div>
             <button className="action-btn" onClick={onRefresh} style={{ padding: '4px 8px' }}>
@@ -241,7 +241,7 @@ for p in papers:
         </div>
 
         <div className="cockpit-card" style={{ padding: 18, minWidth: 0 }}>
-          <div className="cockpit-card-title" style={{ marginBottom: 12 }}>
+          <div className="cockpit-card-title mb-12">
             <Zap size={15} style={{ color: 'var(--status-amber)' }} />
             <span>Agent Request Simulator</span>
           </div>
@@ -277,8 +277,8 @@ for p in papers:
           </form>
 
           {testError && (
-            <div className="alert alert-danger" style={{ marginBottom: 10 }}>
-              <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div className="alert alert-danger mb-10">
+              <AlertTriangle size={15} className="icon-inline" />
               <div>{testError}</div>
             </div>
           )}
@@ -311,7 +311,7 @@ for p in papers:
 
       {/* Integration snippets */}
       <div className="cockpit-card" style={{ padding: 18 }}>
-        <div className="cockpit-card-title" style={{ marginBottom: 14 }}>
+        <div className="cockpit-card-title mb-14">
           <Terminal size={15} style={{ color: 'var(--status-violet)' }} />
           <span>One-Click Agent Integration Snippets</span>
         </div>

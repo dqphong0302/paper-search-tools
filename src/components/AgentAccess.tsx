@@ -89,7 +89,7 @@ export const AgentAccess: React.FC = () => {
     {error && <div className="alert alert-warning" role="alert">{error}</div>}
     {message && <div role="status">{message}</div>}
     <form className="agent-access-form" onSubmit={create}>
-      <fieldset disabled={busy || !ready || !!created} className="cockpit-card" style={{ display: 'grid', gap: 12, minWidth: 0 }}>
+      <fieldset disabled={busy || !ready || !!created} className="cockpit-card u-grid min-w-0">
         <legend>New connection</legend>
         <label htmlFor="agent-name">Name</label>
         <input id="agent-name" className="field-input" value={name} maxLength={60} required placeholder="Research assistant"

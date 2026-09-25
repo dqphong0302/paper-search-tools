@@ -28,7 +28,7 @@ export const BackupRestore: React.FC = () => {
     finally { setBusy(null); }
   };
 
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+  return <div className="u-stack u-gap-10">
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
       <button id="export-backup" type="button" className="action-btn action-btn-primary" disabled={!isTauri() || busy !== null} onClick={() => void backup()}>{busy === 'backup' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}<span>Back up research data</span></button>
       <button id="restore-backup" type="button" className="action-btn" disabled={!isTauri() || busy !== null} onClick={() => void restore()}>{busy === 'restore' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}<span>Restore backup</span></button>

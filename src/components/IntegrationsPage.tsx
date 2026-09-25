@@ -54,9 +54,9 @@ export const IntegrationsPage: React.FC = () => {
     </div></div>
     {!native && <div className="alert alert-warning" role="status">File installation is only supported in the desktop Tauri application. Web browser sandbox cannot access local filesystem paths.</div>}
     {error && <div className="alert alert-danger" role="alert">{error}</div>}
-    {message && <div className="alert alert-success" role="status" style={{ overflowWrap: 'anywhere' }}>{message}</div>}
+    {message && <div className="alert alert-success break-anywhere" role="status">{message}</div>}
 
-    <fieldset disabled={busy || !native} className="cockpit-card" style={{ display: 'grid', gap: 12, minWidth: 0 }}>
+    <fieldset disabled={busy || !native} className="cockpit-card u-grid min-w-0">
       <legend>1. Target Skills Directory</legend>
       <label htmlFor="skills-target">Absolute path to an existing directory</label>
       <input id="skills-target" className="field-input" placeholder="/path/to/AI-client/skills" value={targetRoot}
@@ -65,7 +65,7 @@ export const IntegrationsPage: React.FC = () => {
       <button id="skills-refresh" className="action-btn" disabled={!targetRoot.trim()} onClick={() => void perform(() => refresh(targetRoot))}><RefreshCw size={14} /> Read Directory</button>
     </fieldset>
 
-    <fieldset disabled={busy || !native} className="cockpit-card" style={{ display: 'grid', gap: 12, minWidth: 0 }}>
+    <fieldset disabled={busy || !native} className="cockpit-card u-grid min-w-0">
       <legend>2. Preview & Install Skill</legend>
       <label htmlFor="skills-bundle">Skill</label>
       <select id="skills-bundle" className="field-input" value={source.startsWith('builtin:') ? source : ''}
@@ -78,7 +78,7 @@ export const IntegrationsPage: React.FC = () => {
       {!source.startsWith('builtin:') && <><label htmlFor="skills-source">Source folder containing SKILL.md</label>
       <input id="skills-source" className="field-input" placeholder="/path/to/source-skill" value={source}
         onChange={(event) => { setSource(event.target.value); setPreview(null); }} /></>}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className="u-wrap">
         <button id="skills-preview" className="action-btn" disabled={!source.trim()} onClick={() => void perform(async () => setPreview(await invoke<SkillInfo>('preview_skill', { source })))}><Eye size={14} /> Preview</button>
         <button id="skills-install" className="action-btn action-btn-primary" disabled={!preview || !targetRoot.trim()} onClick={install}><Download size={14} /> Install Skill</button>
       </div>
@@ -95,9 +95,9 @@ export const IntegrationsPage: React.FC = () => {
       {!loadedRoot && <p>Enter target skills directory and click Read Directory.</p>}
       {skills.map((skill) => <article key={skill.path} style={{ borderTop: '1px solid var(--cockpit-border)', padding: '12px 0' }}>
         <h3>{skill.name} <span className="cockpit-badge">{skill.enabled ? 'ENABLED' : 'DISABLED'}</span></h3>
-        <p style={{ overflowWrap: 'anywhere' }}>Source: {skill.source}</p>
-        <p style={{ overflowWrap: 'anywhere' }}>Target: {skill.path}</p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <p className="break-anywhere">Source: {skill.source}</p>
+        <p className="break-anywhere">Target: {skill.path}</p>
+        <div className="u-wrap">
           <button id={`skill-view-${skill.name}`} className="action-btn" onClick={() => { setPreview(skill); setSource(skill.source); }}><Eye size={14} /> View Contents</button>
           <button id={`skill-toggle-${skill.name}`} className="action-btn" disabled={busy || !native} onClick={() => void perform(async () => {
             await invoke('set_skill_enabled', { targetRoot: loadedRoot, name: skill.name, enabled: !skill.enabled });

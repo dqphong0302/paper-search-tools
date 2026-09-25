@@ -118,7 +118,7 @@ export const AiClients: React.FC = () => {
   }
 
   return (
-    <section style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <section className="u-stack">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, maxWidth: 640 }}>
           Connects this gateway to the AI clients on this machine. Installing writes one MCP server entry
@@ -131,11 +131,11 @@ export const AiClients: React.FC = () => {
         </button>
       </div>
 
-      {error && <div className="alert alert-danger" role="alert" style={{ overflowWrap: 'anywhere' }}>{error}</div>}
-      {message && <div className="alert alert-success" role="status" style={{ overflowWrap: 'anywhere' }}>{message}</div>}
+      {error && <div className="alert alert-danger break-anywhere" role="alert">{error}</div>}
+      {message && <div className="alert alert-success break-anywhere" role="status">{message}</div>}
       {tokenNote && (
-        <div className="alert alert-warning" role="status" style={{ overflowWrap: 'anywhere' }}>
-          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div className="alert alert-warning break-anywhere" role="status">
+          <AlertTriangle size={14} className="icon-inline" />
           <span>{tokenNote}</span>
         </div>
       )}
@@ -191,8 +191,8 @@ export const AiClients: React.FC = () => {
                   </button>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Plug size={13} style={{ color: 'var(--primary-cyan)' }} />
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>MCP server</span>
+                      <Plug size={13} className="text-accent" />
+                      <span className="text-sm font-semibold">MCP server</span>
                       <StatusPill ok={client.mcp_installed} okLabel="CONFIGURED" offLabel="NOT CONFIGURED" />
                       <span className="cockpit-badge" style={{ fontSize: 9 }}>{client.mcp_format.toUpperCase()}</span>
                     </div>
@@ -204,11 +204,11 @@ export const AiClients: React.FC = () => {
                     )}
                     {client.mcp_error && (
                       <span style={{ fontSize: 10.5, color: 'var(--status-rose)', display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-                        <AlertTriangle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
-                        <span style={{ overflowWrap: 'anywhere' }}>{client.mcp_error}</span>
+                        <AlertTriangle size={11} className="icon-inline" />
+                        <span className="break-anywhere">{client.mcp_error}</span>
                       </span>
                     )}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <div className="u-wrap u-gap-6">
                       {client.mcp_managed && (
                         <button
                           id={`ai-client-${client.id}-remove-mcp`}
@@ -226,8 +226,8 @@ export const AiClients: React.FC = () => {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5, borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Package size={13} style={{ color: 'var(--primary-cyan)' }} />
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>Skills</span>
+                      <Package size={13} className="text-accent" />
+                      <span className="text-sm font-semibold">Skills</span>
                       {client.skills_path ? (
                         <StatusPill
                           ok={skillsInstalled === client.skills.length && client.skills.length > 0}
@@ -260,7 +260,7 @@ export const AiClients: React.FC = () => {
                             </span>
                           ))}
                         </div>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <div className="u-wrap u-gap-6">
                           {managedSkills > 0 && (
                             <button
                               id={`ai-client-${client.id}-remove-skills`}
@@ -289,7 +289,7 @@ export const AiClients: React.FC = () => {
         })}
       </div>
       {!loading && clients.length === 0 && (
-        <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No supported AI client was found on this machine.</p>
+        <p className="text-sm text-muted">No supported AI client was found on this machine.</p>
       )}
     </section>
   );

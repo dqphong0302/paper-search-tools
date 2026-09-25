@@ -75,7 +75,7 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({
   ];
 
   return (
-    <div className="page-container" style={{ gap: 14 }}>
+    <div className="page-container u-gap-14">
       <div className="page-header">
         <div>
           <h2 className="page-title">{active.isLibrary ? <Bookmark size={17} /> : <FolderOpen size={17} />} {active.name}</h2>
@@ -88,7 +88,7 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({
         <WorkspaceActions />
       </div>
 
-      <div role="tablist" aria-label="Library sections" className="segmented" style={{ alignSelf: 'flex-start' }}>
+      <div role="tablist" aria-label="Library sections" className="segmented u-self-start">
         {tabs.map((tab) => (
           <button
             key={tab.id}

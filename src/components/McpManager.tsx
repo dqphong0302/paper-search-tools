@@ -41,7 +41,7 @@ export const McpManager: React.FC = () => {
     <p>Supports JSON configurations with an <code>mcpServers</code> key: stdio, HTTP, and SSE. Choose the canonical file, not a symlink. Adding config does not automatically start external servers.</p>
     {!native && <div className="alert alert-warning">Reading and editing client configuration is only available inside the desktop application.</div>}
     {error && <div role="alert" className="alert alert-danger">{error}</div>}
-    {message && <div role="status" className="alert" style={{ overflowWrap: 'anywhere' }}>{message}</div>}
+    {message && <div role="status" className="alert break-anywhere">{message}</div>}
     <fieldset disabled={!native || busy} style={{ display: 'grid', gap: 10, border: 0, padding: 0, minWidth: 0 }}>
       <label htmlFor="mcp-config-path">Target configuration file (absolute path, parent directory must exist)</label>
       <input id="mcp-config-path" className="field-input" value={path} placeholder="/absolute/path/to/client/mcp.json" onChange={(event) => { setPath(event.target.value); setView(null); }} />
@@ -51,7 +51,7 @@ export const McpManager: React.FC = () => {
     <input id="mcp-server-name" className="field-input" value={name} disabled={busy} onChange={(event) => setName(event.target.value)} />
     <label htmlFor="mcp-server-definition">Server JSON Definition — prefer referencing environment variables; do not paste secrets into shared configs</label>
     <textarea id="mcp-server-definition" className="field-input" rows={8} value={definition} disabled={busy} spellCheck={false} onChange={(event) => setDefinition(event.target.value)} style={{ fontFamily: 'var(--font-mono)', resize: 'vertical' }} />
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+    <div className="u-wrap">
       <button id="mcp-template-http" className="action-btn" disabled={busy} onClick={() => setDefinition(SAMPLE)}>ScholarGate HTTP Template</button>
       <button id="mcp-template-stdio" className="action-btn" disabled={busy} onClick={() => setDefinition(JSON.stringify({ command: '/absolute/path/to/node', args: ['/absolute/path/to/server.js'], env: {} }, null, 2))}>stdio Template</button>
       <button id="mcp-copy-config" className="action-btn" disabled={busy} onClick={() => void run(async () => {

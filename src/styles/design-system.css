@@ -1972,7 +1972,8 @@ a.action-btn:hover {
 .workspace-switcher-row { display: flex; gap: 6px; align-items: center; }
 .workspace-switcher select,
 .workspace-switcher input { flex: 1; min-width: 0; font-size: 12px; padding: 5px 8px; border: 1px solid var(--cockpit-border); border-radius: var(--radius-md); background: var(--cockpit-card); color: var(--text-main); }
-.workspace-switcher .action-btn { padding: 5px 8px; }
+.workspace-switcher .action-btn { padding: 4px 6px; }
+.workspace-switcher select { font-size: 11.5px; padding: 5px 4px; }
 .workspace-switcher-error { font-size: 11px; color: var(--status-rose); }
 .workspace-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .workspace-actions input { font-size: 12px; padding: 5px 8px; border: 1px solid var(--cockpit-border); border-radius: var(--radius-md); background: var(--cockpit-card); color: var(--text-main); }
@@ -1981,11 +1982,6 @@ a.action-btn:hover {
 .u-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .u-between { justify-content: space-between; }
 .u-stack { display: flex; flex-direction: column; gap: 12px; }
-.u-gap-4 { gap: 4px; }
-.u-gap-6 { gap: 6px; }
-.u-gap-10 { gap: 10px; }
-.u-gap-12 { gap: 12px; }
-.u-gap-14 { gap: 14px; }
 .u-self-start { align-self: flex-start; justify-self: start; }
 .text-sm { font-size: 12px; }
 .text-xs { font-size: 11.5px; }
@@ -2104,3 +2100,25 @@ a.action-btn { text-decoration: none; }
 .source-detail-actions { margin-top: 4px; }
 .source-health { font-size: 10px; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .ollama-grid { grid-template-columns: 1fr; } .mesh-row { grid-template-columns: 1fr; } }
+.u-flex { display: flex; gap: 8px; }
+.u-center { align-items: center; }
+.u-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
+.u-grid { display: grid; gap: 12px; }
+.min-w-0 { min-width: 0; }
+.m-0 { margin: 0; }
+.mb-10 { margin-bottom: 10px; }
+.mb-12 { margin-bottom: 12px; }
+.mb-14 { margin-bottom: 14px; }
+.text-accent { color: var(--primary-cyan); }
+.text-11 { font-size: 11px; }
+.font-semibold { font-weight: 600; }
+.no-underline { text-decoration: none; }
+.break-anywhere { overflow-wrap: anywhere; }
+.icon-inline { flex-shrink: 0; margin-top: 1px; }
+.icon-offset-2 { flex-shrink: 0; margin-top: 2px; }
+/* Gap modifiers last so they override the layout utilities above. */
+.u-gap-4 { gap: 4px; }
+.u-gap-6 { gap: 6px; }
+.u-gap-10 { gap: 10px; }
+.u-gap-12 { gap: 12px; }
+.u-gap-14 { gap: 14px; }

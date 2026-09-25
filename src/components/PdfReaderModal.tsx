@@ -118,7 +118,7 @@ export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: (
           <span style={{ fontSize: 12, minWidth: 90, textAlign: 'center' }}>Page {pageNumber} / {pdf?.numPages ?? '—'}</span>
           <button className="action-btn" disabled={!pdf || pageNumber >= pdf.numPages} onClick={() => setPageNumber((page) => Math.min(pdf?.numPages ?? page, page + 1))}><ChevronRight size={14} /></button>
           <button className="action-btn" disabled={!pdf || scale <= 0.6} onClick={() => setScale((value) => Math.max(0.6, value - 0.2))}><ZoomOut size={14} /></button>
-          <span style={{ fontSize: 12 }}>{Math.round(scale * 100)}%</span>
+          <span className="text-sm">{Math.round(scale * 100)}%</span>
           <button className="action-btn" disabled={!pdf || scale >= 2.4} onClick={() => setScale((value) => Math.min(2.4, value + 0.2))}><ZoomIn size={14} /></button>
           <button id="extract-pdf-text" className="action-btn action-btn-primary" disabled={!pdf || extracting} onClick={() => void extract()}>{extracting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}<span>{extracting ? 'Extracting…' : pageText.length ? 'Extract again' : 'Extract text'}</span></button>
           {pageText.length > 0 && <>

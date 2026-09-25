@@ -32,7 +32,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   const hasSearch = searchNonce > 0 || Boolean(initialQuery?.trim());
 
   return (
-    <div className="page-container" style={{ gap: 14 }}>
+    <div className="page-container u-gap-14">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         {hasSearch && mode === 'papers' && (
           <button
@@ -49,8 +49,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
         <div
           role="tablist"
           aria-label="Search Mode"
-          className="segmented"
-          style={{ alignSelf: 'flex-start' }}
+          className="segmented u-self-start"
         >
           <button
             id="search-mode-papers"

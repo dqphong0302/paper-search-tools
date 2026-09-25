@@ -124,14 +124,14 @@ const PrismaTool: React.FC = () => {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 20, alignItems: 'start' }}>
       <div className="cockpit-card" style={{ padding: 18, minWidth: 0 }}>
         <div className="cockpit-card-title" style={{ marginBottom: 4 }}>
-          <GitBranch size={15} style={{ color: 'var(--primary-cyan)' }} />
+          <GitBranch size={15} className="text-accent" />
           <span>PRISMA 2020 Flow Parameters</span>
         </div>
-        <div className="cockpit-card-subtitle" style={{ marginBottom: 14 }}>
+        <div className="cockpit-card-subtitle mb-14">
           Downstream counts are calculated automatically to maintain mathematical consistency.
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="u-stack">
           <div>
             <label className="field-label">Data sources label (displayed on chart)</label>
             <input
@@ -156,7 +156,7 @@ const PrismaTool: React.FC = () => {
           ))}
 
           {s.identified === 0 && (
-            <div className="alert alert-info" style={{ margin: 0 }}>
+            <div className="alert alert-info m-0">
               No data entered yet. Input actual record counts from your systematic review workflow to render the diagram.
             </div>
           )}
@@ -181,12 +181,12 @@ const PrismaTool: React.FC = () => {
               the info notice above, so only render this when there is a message. */}
           {errors.length > 0 && (
             <div className="alert alert-danger">
-              <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+              <AlertTriangle size={15} className="icon-inline" />
               <div>{errors.join(' ')}</div>
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div className="u-wrap">
             <button className="action-btn" onClick={copyMermaid} disabled={!valid}>
               {copied ? <Check size={14} color="var(--status-emerald)" /> : <Copy size={14} />}
               <span>{copied ? 'Copied Mermaid code' : 'Copy Mermaid code'}</span>
@@ -393,7 +393,7 @@ const MetaTool: React.FC = () => {
       <div className="page-header" style={{ marginBottom: 16 }}>
         <div>
           <div className="page-title" style={{ fontSize: 15 }}>
-            <BarChart3 size={16} style={{ color: 'var(--primary-cyan)' }} />
+            <BarChart3 size={16} className="text-accent" />
             <span>Meta-Analysis — Random Effects Model (DerSimonian–Laird)</span>
           </div>
           <div className="page-subtitle">
@@ -401,7 +401,7 @@ const MetaTool: React.FC = () => {
             are calculated directly from your input data.
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="u-flex">
           <button className="action-btn" onClick={() => setStudies(EXAMPLE_STUDIES)}>
             <RotateCcw size={14} />
             <span>Load Example Data</span>
@@ -497,7 +497,7 @@ const MetaTool: React.FC = () => {
 
         {incompleteCount > 0 && (
           <div className="alert alert-warning">
-            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <AlertTriangle size={15} className="icon-inline" />
             <div>
               {incompleteCount} rows are incomplete or invalid and skipped. Each study requires
               0 &lt; Lower CI ≤ OR ≤ Upper CI.
@@ -687,7 +687,7 @@ export const ClinicalSuite: React.FC = () => {
 
   return (
     <div className="page-container">
-      <div className="segmented" style={{ alignSelf: 'flex-start' }} role="tablist">
+      <div className="segmented u-self-start" role="tablist">
         <button
           role="tab"
           aria-selected={activeTool === 'prisma'}

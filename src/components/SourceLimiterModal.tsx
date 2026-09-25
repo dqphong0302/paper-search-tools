@@ -120,13 +120,13 @@ export const SourceLimiterModal: React.FC<SourceLimiterModalProps> = ({
         style={{ maxWidth: 780, width: '92vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
       >
         <div className="modal-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Filter size={18} style={{ color: 'var(--primary-cyan)' }} />
+          <div className="u-flex u-center">
+            <Filter size={18} className="text-accent" />
             <div>
               <div className="modal-title" style={{ fontSize: 16 }}>
                 Academic source limiter
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <div className="text-sm text-muted">
                 Showing only the {allSources.length} sources this build can query
               </div>
             </div>
@@ -150,7 +150,7 @@ export const SourceLimiterModal: React.FC<SourceLimiterModalProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-            <Layers size={14} style={{ color: 'var(--primary-cyan)' }} />
+            <Layers size={14} className="text-accent" />
             <span>Current discipline:</span>
             <span className="badge badge-group" style={{ fontWeight: 600 }}>
               {currentPreset?.label || 'Default (Settings)'}
@@ -160,7 +160,7 @@ export const SourceLimiterModal: React.FC<SourceLimiterModalProps> = ({
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div className="u-wrap u-gap-6">
             {currentPreset && currentPreset.sources.length > 0 && (
               <button
                 type="button"
@@ -305,7 +305,7 @@ export const SourceLimiterModal: React.FC<SourceLimiterModalProps> = ({
                   }}
                   onClick={(e) => e.stopPropagation()}
                 />
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="u-grow">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                     <span
                       style={{
@@ -354,7 +354,7 @@ export const SourceLimiterModal: React.FC<SourceLimiterModalProps> = ({
 
         {/* Modal Footer */}
         <div className="modal-footer" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <div className="text-sm text-muted">
             {tempSelected.length === 0 ? (
               <span>Using the default discipline / Settings selection</span>
             ) : (
@@ -363,7 +363,7 @@ export const SourceLimiterModal: React.FC<SourceLimiterModalProps> = ({
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="u-flex">
             <button type="button" className="action-btn" onClick={onClose}>
               Cancel
             </button>

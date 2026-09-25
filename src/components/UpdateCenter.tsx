@@ -77,7 +77,7 @@ export const UpdateCenter: React.FC = () => {
     setMessage(`Update ${version} postponed until the next version or a manual check.`);
   };
 
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+  return <div className="u-stack u-gap-10">
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
       <span className="cockpit-badge badge-cyan">Installed {currentVersion}</span>
       <span className="cockpit-badge">Channel: Stable</span>
@@ -89,7 +89,7 @@ export const UpdateCenter: React.FC = () => {
         <button type="button" className="action-btn" onClick={postpone}><RotateCcw size={14} /><span>Later</span></button>
       </>}
     </div>
-    {progress !== null && <div><progress max={100} value={progress} style={{ width: '100%' }} /><div style={{ fontSize: 11 }}>{progress}%</div></div>}
+    {progress !== null && <div><progress max={100} value={progress} style={{ width: '100%' }} /><div className="text-11">{progress}%</div></div>}
     <div role="status" className={`alert ${status === 'error' ? 'alert-danger' : status === 'available' ? 'alert-info' : ''}`}>
       {status === 'current' && <CheckCircle2 size={15} />}<span>{message}</span>
     </div>

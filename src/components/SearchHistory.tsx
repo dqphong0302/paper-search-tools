@@ -125,7 +125,7 @@ export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, wor
       <div className="page-header" style={{ borderBottom: '1px solid var(--cockpit-border)', paddingBottom: 16 }}>
         <div>
           <h2 className="page-title">
-            <History size={17} style={{ color: 'var(--primary-cyan)' }} />
+            <History size={17} className="text-accent" />
             <span>Search History</span>
             <span className="cockpit-badge badge-cyan">{history.length} Queries</span>
           </h2>
@@ -148,7 +148,7 @@ export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, wor
 
       {error && (
         <div className="alert alert-danger">
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <AlertTriangle size={16} className="icon-inline" />
           <div>{error}</div>
         </div>
       )}
@@ -168,7 +168,7 @@ export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, wor
               gap: 8,
             }}
           >
-            <Search size={15} style={{ color: 'var(--text-dim)' }} />
+            <Search size={15} className="text-dim" />
             <input
               id="filter-search-history"
               aria-label="Filter search history"
@@ -214,7 +214,7 @@ export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, wor
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="u-stack u-gap-10">
           {filtered.map((item) => (
             <div
               key={item.id}
@@ -227,7 +227,7 @@ export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, wor
               }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0, paddingRight: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="u-flex u-center">
                   <Search size={15} style={{ color: 'var(--primary-cyan)', flexShrink: 0 }} />
                   <span
                     style={{

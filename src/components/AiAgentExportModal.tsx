@@ -270,12 +270,12 @@ export const AiAgentExportModal: React.FC<AiAgentExportModalProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Bot size={22} style={{ color: 'var(--primary-cyan)' }} />
+            <Bot size={22} className="text-accent" />
             <div>
               <div className="modal-title" style={{ fontSize: 16 }}>
                 Send data to an AI agent project
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <div className="text-sm text-muted">
                 {isBatch
                   ? `Export ${papers.length} papers from the "${workspaceName}" library`
                   : `Export paper: "${papers[0].title}"`}
@@ -326,7 +326,7 @@ export const AiAgentExportModal: React.FC<AiAgentExportModalProps> = ({
                     }}
                   >
                     <span style={{ fontSize: 18 }}>{agent.icon}</span>
-                    <div style={{ minWidth: 0 }}>
+                    <div className="min-w-0">
                       <div
                         style={{
                           fontSize: 13,
@@ -351,7 +351,7 @@ export const AiAgentExportModal: React.FC<AiAgentExportModalProps> = ({
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-main)', marginBottom: 8 }}>
               2. Data format
             </div>
-            <div className="segmented" style={{ alignSelf: 'flex-start' }} role="tablist">
+            <div className="segmented u-self-start" role="tablist">
               <button
                 type="button"
                 role="tab"
@@ -433,11 +433,11 @@ export const AiAgentExportModal: React.FC<AiAgentExportModalProps> = ({
             alignItems: 'center',
           }}
         >
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          <div className="text-sm text-muted">
             Paste it straight into the AI chat window, or drop the file into the agent’s project folder.
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="u-flex">
             <button type="button" className="action-btn" onClick={onClose}>
               Close
             </button>

@@ -202,7 +202,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ workspaceId })
               color: 'var(--text-main)',
             }}
           >
-            <HardDrive size={14} style={{ color: 'var(--primary-cyan)' }} />
+            <HardDrive size={14} className="text-accent" />
             <span>Total storage: <b>{formatBytes(totalBytes)}</b></span>
           </div>
 
@@ -227,7 +227,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ workspaceId })
 
       {error && (
         <div className="alert alert-danger">
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+          <AlertTriangle size={16} className="icon-inline" />
           <div>{error}</div>
         </div>
       )}
@@ -247,7 +247,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ workspaceId })
               gap: 8,
             }}
           >
-            <Search size={15} style={{ color: 'var(--text-dim)' }} />
+            <Search size={15} className="text-dim" />
             <input
               id="filter-downloads"
               aria-label="Filter downloaded PDFs"
@@ -291,7 +291,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ workspaceId })
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="u-stack">
           {filtered.map((item) => (
             <div
               key={item.id}
@@ -343,7 +343,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ workspaceId })
                     <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
                       Size: {formatBytes(item.file_size_bytes)}
                     </span>
-                    <span style={{ color: 'var(--text-dim)' }}>•</span>
+                    <span className="text-dim">•</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
                       <Clock size={11} />
                       {formatTime(item.downloaded_at)}
