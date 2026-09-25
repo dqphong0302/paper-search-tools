@@ -7,6 +7,7 @@ pub mod ojs;
 pub mod open_repos;
 pub mod public_apis;
 pub mod registry;
+pub mod scholarly;
 
 /// Error for a keyed source that answered with an authentication failure. The key
 /// exists but the provider rejected it, so the remedy is the same as a missing
