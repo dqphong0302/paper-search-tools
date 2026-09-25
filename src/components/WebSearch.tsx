@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { gatewayFetch } from '../lib/gateway';
+import { gatewayFetch, getGatewayPort } from '../lib/gateway';
 
 interface ResponseData {
   query: string;
@@ -8,7 +8,7 @@ interface ResponseData {
   elapsed_ms: number;
 }
 
-export const WebSearch: React.FC<{ port: number }> = ({ port }) => {
+export const WebSearch: React.FC = () => {
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(10);
   const [busy, setBusy] = useState(false);
@@ -35,7 +35,7 @@ export const WebSearch: React.FC<{ port: number }> = ({ port }) => {
   };
   return <section className="page-container">
     <h2>Academic & Web Search</h2>
-    <p className="page-subtitle">SearXNG Connector · Local gateway 127.0.0.1:{port} · Configure in Settings → System & Storage. Web search results provide general literature and reference context outside indexed academic databases.</p>
+    <p className="page-subtitle">SearXNG Connector · Local gateway 127.0.0.1:{getGatewayPort()} · Configure in Settings → System & Storage. Web search results provide general literature and reference context outside indexed academic databases.</p>
     <form onSubmit={search} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBlock: 20 }}>
       <label htmlFor="web-query" style={{ flex: 1 }}>Query
         <input id="web-query" className="field-input" placeholder="e.g. machine learning in medical diagnosis" required maxLength={4000} value={query} onChange={(e) => setQuery(e.target.value)} />

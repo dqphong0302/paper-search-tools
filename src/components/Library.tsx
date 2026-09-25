@@ -25,6 +25,7 @@ import { getPaperKind, KIND_META } from '../lib/paperKind';
 import { FulltextViewerModal } from './FulltextViewerModal';
 import { AiAgentExportModal } from './AiAgentExportModal';
 import { canDownloadPdf, requestPdfDownload } from '../lib/pdfDownload';
+import { useWorkspace } from '../state/WorkspaceContext';
 
 const ABSTRACT_CLAMP = 280;
 
@@ -49,6 +50,7 @@ export const Library: React.FC<LibraryProps> = ({
   onUpdatePaper,
   workspaceName = 'Interest Library',
 }) => {
+  const { scopeId: workspaceScope } = useWorkspace();
   const [exported, setExported] = useState(false);
   const [exportedBib, setExportedBib] = useState(false);
   const [exportedOneId, setExportedOneId] = useState<string | null>(null);
@@ -127,7 +129,7 @@ export const Library: React.FC<LibraryProps> = ({
   const handleDownloadPaperPdf = async (paper: Paper): Promise<boolean> => {
     if (!canDownloadPdf(paper)) return false;
     setDownloadingIds((prev) => new Set(prev).add(paper.id));
-    const result = await requestPdfDownload(paper);
+    const result = await requestPdfDownload(paper, workspaceScope);
     setDownloadingIds((prev) => {
       const next = new Set(prev);
       next.delete(paper.id);

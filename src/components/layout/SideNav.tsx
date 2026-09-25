@@ -7,6 +7,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 export type TabType = 'search' | 'research' | 'gateway' | 'settings';
 
@@ -24,7 +25,6 @@ interface SideNavProps {
   isCollapsed: boolean;
   setIsCollapsed: (val: boolean | ((prev: boolean) => boolean)) => void;
   savedCount: number;
-  downloadCount?: number;
 }
 
 export const SideNav: React.FC<SideNavProps> = ({
@@ -33,16 +33,14 @@ export const SideNav: React.FC<SideNavProps> = ({
   isCollapsed,
   setIsCollapsed,
   savedCount,
-  downloadCount = 0,
 }) => {
-  const researchCount = savedCount + downloadCount;
   const mainNav: NavItem[] = [
     { id: 'search', label: 'Search', icon: <Search size={17} /> },
     {
       id: 'research',
       label: 'Library',
       icon: <Bookmark size={17} />,
-      badge: researchCount > 0 ? `${researchCount}` : undefined,
+      badge: savedCount > 0 ? `${savedCount}` : undefined,
       badgeColor: 'badge-cyan',
     },
     {
@@ -115,6 +113,8 @@ export const SideNav: React.FC<SideNavProps> = ({
           </div>
         )}
       </div>
+
+      {!isCollapsed && <WorkspaceSwitcher />}
 
       {/* Navigation Sections */}
       <nav className="nav-section">

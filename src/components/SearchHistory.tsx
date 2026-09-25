@@ -11,7 +11,7 @@ import {
   Star,
   AlertTriangle
 } from 'lucide-react';
-import { gatewayFetch } from '../lib/gateway';
+import { gatewayFetch, getGatewayPort } from '../lib/gateway';
 
 export interface SearchHistoryItem {
   id: string;
@@ -25,11 +25,10 @@ export interface SearchHistoryItem {
 
 interface SearchHistoryProps {
   onRerunSearch: (query: string) => void;
-  port: number;
   workspaceId?: string;
 }
 
-export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, port, workspaceId }) => {
+export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, workspaceId }) => {
   const [history, setHistory] = useState<SearchHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterText, setFilterText] = useState('');
@@ -64,7 +63,7 @@ export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, por
     } catch (e) {
       setError(
         e instanceof TypeError
-          ? `Unable to connect to local gateway server at 127.0.0.1:${port}.`
+          ? `Unable to connect to local gateway server at 127.0.0.1:${getGatewayPort()}.`
           : `Failed to load query history: ${(e as Error).message}`
       );
     } finally {
@@ -75,7 +74,7 @@ export const SearchHistory: React.FC<SearchHistoryProps> = ({ onRerunSearch, por
   useEffect(() => {
     fetchHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [port, workspaceId]);
+  }, [workspaceId]);
 
   const handleClear = async () => {
     if (!window.confirm('Clear all search history? This cannot be undone.'))

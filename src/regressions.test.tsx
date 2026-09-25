@@ -14,7 +14,7 @@ import type { ResearchLibrary } from './components/ResearchWorkspace';
 import { gatewayFetch, initGateway } from './lib/gateway';
 import type { Paper, SearchResponse, WorkspacePaper } from './types';
 
-vi.mock('./lib/gateway', () => ({ DEFAULT_GATEWAY_PORT: 8795, initGateway: vi.fn(), gatewayFetch: vi.fn(), gatewayUrl: (path: string) => `http://localhost:8795${path}` }));
+vi.mock('./lib/gateway', () => ({ DEFAULT_GATEWAY_PORT: 8795, getGatewayPort: () => 8795, initGateway: vi.fn(), gatewayFetch: vi.fn(), gatewayUrl: (path: string) => `http://localhost:8795${path}` }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 vi.mock('./components/SearchPage', () => ({ SearchPage: () => null }));
 vi.mock('./components/AgentGateway', () => ({ AgentGateway: () => null }));
@@ -115,6 +115,20 @@ describe('interest library request isolation', () => {
     expect(host.textContent).toContain('edited-A');
     expect(fetchMock).toHaveBeenCalledWith('/api/library?paper_id=shared', expect.objectContaining({ method: 'PATCH' }));
   });
+  it('loads the papers of the selected project workspace', async () => {
+    localStorage.setItem('sg_active_workspace', 'p1');
+    fetchMock.mockImplementation(async (url) => {
+      if (url === '/api/telemetry') return response({ recent_logs: [] });
+      if (url === '/api/workspaces') return response([{ id: 'p1', name: 'Project', created_at: 1, updated_at: 1, paper_count: 1, query_count: 0 }]);
+      if (url === '/api/workspaces/p1/papers') return response([workspacePaper('P')]);
+      if (url.startsWith('/api/library')) return response([workspacePaper('L')]);
+      throw new Error(`Unexpected request ${url}`);
+    });
+    await render(<App />);
+    await click('#research');
+    expect(host.textContent).toContain('Workspace-P-paper');
+    expect(host.textContent).not.toContain('Workspace-L-paper');
+  });
 });
 
 describe('topic and source availability setup', () => {
@@ -166,7 +180,7 @@ describe('topic and source availability setup', () => {
 
 describe('search pagination', () => {
   const explorer = (query: string) => <Explorer initialQuery={query} searchNonce={1}
-    port={8795} onSavePaper={() => {}} savedPaperIds={new Set()} />;
+    onSavePaper={() => {}} savedPaperIds={new Set()} />;
 
   it.each(['success', 'failure'])('ignores an old load-more %s after a new query', async outcome => {
     const old = deferred<Response>();
@@ -226,7 +240,7 @@ describe('search pagination', () => {
 it('opens paper details on demand and restores keyboard focus on Escape', async () => {
   fetchMock.mockResolvedValue(response({ ...page('A', ['first']), papers: [{ ...paper('first'), abstract: 'A unique abstract.' }] }));
   const save = vi.fn();
-  await render(<Explorer initialQuery="A" port={8795} onSavePaper={save} savedPaperIds={new Set()} />);
+  await render(<Explorer initialQuery="A" onSavePaper={save} savedPaperIds={new Set()} />);
   expect(host.querySelector('.paper-detail-panel')).toBeNull();
   const saveButton = host.querySelector<HTMLButtonElement>('button[title="Add this paper to the interest list"]')!;
   await act(async () => saveButton.click());
@@ -246,7 +260,7 @@ it('previews a bundled skill and installs only after confirmation', async () => 
   const preview = { name: 'paper-search', source: 'builtin:paper-search', path: '', content: 'Skill content', files: 1, bytes: 20, enabled: true };
   vi.mocked(invoke).mockImplementation(async command => command === 'list_skills' ? [preview] : preview);
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-  await render(<IntegrationsPage port={8795} />);
+  await render(<IntegrationsPage />);
   expect(host.querySelector<HTMLInputElement>('#skills-source')).toBeNull();
   expect(host.querySelector<HTMLButtonElement>('#skills-install')!.disabled).toBe(true);
   await click('#skills-preview');
@@ -321,7 +335,7 @@ it('keeps saved paper editing available inside the on-demand detail panel', asyn
 
 it('keeps search options collapsed and applies edited filters explicitly', async () => {
   fetchMock.mockResolvedValue(response(page('A', ['first'])));
-  await render(<Explorer initialQuery="A" port={8795} onSavePaper={() => {}} savedPaperIds={new Set()} />);
+  await render(<Explorer initialQuery="A" onSavePaper={() => {}} savedPaperIds={new Set()} />);
   expect(host.querySelector<HTMLDetailsElement>('#search-options')!.open).toBe(false);
   await click('#search-options > summary');
   expect(host.querySelector<HTMLDetailsElement>('#search-options')!.open).toBe(true);
@@ -340,7 +354,7 @@ it('lets users choose a discipline before their first search without changing ke
   const submit = vi.fn();
   const view = (initialQuery = '', searchNonce = 0) => <Explorer initialQuery={initialQuery}
     draftQuery="6g network" searchNonce={searchNonce} onSubmitQuery={submit} hideSearchBar
-    port={8795} onSavePaper={() => {}} savedPaperIds={new Set()} />;
+    onSavePaper={() => {}} savedPaperIds={new Set()} />;
   await render(view());
   await click('#search-options > summary');
   await click('#discipline-stem_nature');
@@ -367,7 +381,7 @@ it('clears the global search history without a workspace filter', async () => {
   vi.spyOn(window, 'confirm').mockReturnValue(true);
   fetchMock.mockResolvedValueOnce(response([{ id: 's1', query: 'fixture', result_count: 1, elapsed_ms: 1, created_at: 1 }]))
     .mockResolvedValueOnce(response({ success: true }));
-  await render(<SearchHistory port={8795} onRerunSearch={() => {}} />);
+  await render(<SearchHistory onRerunSearch={() => {}} />);
   const clear = [...host.querySelectorAll('button')].find(button => button.textContent?.includes('Clear All'))!;
   await act(async () => { clear.click(); });
   expect(fetchMock).toHaveBeenLastCalledWith('/api/history/searches', { method: 'DELETE' });
@@ -388,7 +402,7 @@ it('separates sources that need setup from sources that actually failed', async 
       { id: 'pubmed', name: 'PubMed', queried: false, ok: true, count: 0 },
     ],
   }));
-  await render(<Explorer initialQuery="quantum" searchNonce={1} port={8795}
+  await render(<Explorer initialQuery="quantum" searchNonce={1}
     onSavePaper={() => {}} savedPaperIds={new Set()} hideSearchBar />);
 
   // Only arXiv counts as unresponsive, and only against the two reachable sources.

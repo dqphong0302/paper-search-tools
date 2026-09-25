@@ -13,7 +13,7 @@ import {
   CheckCircle2,
   AlertTriangle
 } from 'lucide-react';
-import { gatewayFetch } from '../lib/gateway';
+import { gatewayFetch, getGatewayPort } from '../lib/gateway';
 import { PdfReaderModal } from './PdfReaderModal';
 
 export interface DownloadRecord {
@@ -30,11 +30,10 @@ export interface DownloadRecord {
 }
 
 interface DownloadHistoryProps {
-  port: number;
   workspaceId?: string;
 }
 
-export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspaceId }) => {
+export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ workspaceId }) => {
   const [downloads, setDownloads] = useState<DownloadRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterText, setFilterText] = useState('');
@@ -54,7 +53,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
     } catch (e) {
       setError(
         e instanceof TypeError
-          ? `Unable to connect to local gateway server at 127.0.0.1:${port}.`
+          ? `Unable to connect to local gateway server at 127.0.0.1:${getGatewayPort()}.`
           : `Failed to load downloads: ${(e as Error).message}`
       );
     } finally {
@@ -65,7 +64,7 @@ export const DownloadHistory: React.FC<DownloadHistoryProps> = ({ port, workspac
   useEffect(() => {
     fetchDownloads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [port, workspaceId]);
+  }, [workspaceId]);
 
   const handleOpenFile = async (id: string, path: string) => {
     setError(null);

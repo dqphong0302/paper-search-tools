@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BookOpen, Globe } from 'lucide-react';
-import { Paper, TelemetryStats } from '../types';
+import { Paper } from '../types';
 import { Explorer } from './Explorer';
 import { WebSearch } from './WebSearch';
 
@@ -10,9 +10,6 @@ interface SearchPageProps {
   initialQuery?: string;
   draftQuery?: string;
   searchNonce?: number;
-  port: number;
-  telemetry: TelemetryStats | null;
-  isOnline: boolean;
   onNavigateToExplorer: (query: string) => void;
   onShowOverview: () => void;
   defaultTopic?: string;
@@ -26,7 +23,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   initialQuery,
   draftQuery,
   searchNonce = 0,
-  port,
   onShowOverview,
   onNavigateToExplorer,
   defaultTopic,
@@ -82,7 +78,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       </div>
 
       {mode === 'web' ? (
-        <WebSearch port={port} />
+        <WebSearch />
       ) : (
         <Explorer
           onSavePaper={onToggleInterest}
@@ -91,7 +87,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           draftQuery={draftQuery}
           onSubmitQuery={onNavigateToExplorer}
           searchNonce={searchNonce}
-          port={port}
           hideSearchBar
           initialScope={defaultTopic}
         />

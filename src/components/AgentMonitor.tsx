@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
 import { Activity, Terminal, Check, Copy, RefreshCw, Zap, AlertTriangle, Loader2 } from 'lucide-react';
 import { TelemetryStats, SearchResponse } from '../types';
-import { gatewayFetch } from '../lib/gateway';
+import { gatewayFetch, getGatewayPort } from '../lib/gateway';
 
 interface AgentMonitorProps {
   telemetry: TelemetryStats | null;
   isOnline: boolean;
   onRefresh: () => void;
-  port: number;
 }
 
-export const AgentMonitor: React.FC<AgentMonitorProps> = ({ telemetry, isOnline, onRefresh, port }) => {
+export const AgentMonitor: React.FC<AgentMonitorProps> = ({ telemetry, isOnline, onRefresh }) => {
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
   const [testQuery, setTestQuery] = useState('lung cancer targeted therapy');
   const [testRunning, setTestRunning] = useState(false);
@@ -40,7 +39,7 @@ export const AgentMonitor: React.FC<AgentMonitorProps> = ({ telemetry, isOnline,
       setTestResult(null);
       setTestError(
         err instanceof TypeError
-          ? `Unable to connect to gateway at 127.0.0.1:${port}.`
+          ? `Unable to connect to gateway at 127.0.0.1:${getGatewayPort()}.`
           : (err as Error).message
       );
     } finally {
@@ -52,7 +51,7 @@ export const AgentMonitor: React.FC<AgentMonitorProps> = ({ telemetry, isOnline,
     {
       mcpServers: {
         scholargate: {
-          url: `http://localhost:${port}/mcp`,
+          url: `http://localhost:${getGatewayPort()}/mcp`,
           headers: { Authorization: 'Bearer <MCP_AUTH_TOKEN>' },
         },
       },
@@ -63,7 +62,7 @@ export const AgentMonitor: React.FC<AgentMonitorProps> = ({ telemetry, isOnline,
 
   const pythonSnippet = `import requests
 
-res = requests.post("http://localhost:${port}/api/search", json={
+res = requests.post("http://localhost:${getGatewayPort()}/api/search", json={
     "query": "type 2 diabetes mellitus",
     "limit": 5
 })
@@ -76,7 +75,7 @@ for p in papers:
       label: 'GATEWAY STATUS',
       value: isOnline ? telemetry?.gateway_status || 'ONLINE' : 'OFFLINE',
       color: isOnline ? 'var(--status-emerald)' : 'var(--status-rose)',
-      sub: `Port ${telemetry?.port ?? port} (REST + MCP)`,
+      sub: `Port ${telemetry?.port ?? getGatewayPort()} (REST + MCP)`,
       dot: true,
     },
     {
@@ -249,7 +248,7 @@ for p in papers:
 
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
             Simulate an autonomous AI Agent dispatching an academic search query to port{' '}
-            <code style={{ fontFamily: 'var(--font-mono)' }}>localhost:{port}</code>:
+            <code style={{ fontFamily: 'var(--font-mono)' }}>localhost:{getGatewayPort()}</code>:
           </p>
 
           <form

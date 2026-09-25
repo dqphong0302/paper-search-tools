@@ -35,14 +35,10 @@ import {
 import searchCatalog from '../lib/searchCatalog.json';
 import { AiClients } from './AiClients';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { gatewayFetch, setGatewayToken } from '../lib/gateway';
+import { gatewayFetch, setGatewayToken, getGatewayPort } from '../lib/gateway';
 import { readSettings, saveSettings } from '../lib/settings';
 import { BackupRestore } from './BackupRestore';
 import { UpdateCenter } from './UpdateCenter';
-
-interface SettingsPageProps {
-  port: number;
-}
 
 // The catalog also lists sources the engine cannot query yet; never offer those.
 const ALL_SOURCES = searchCatalog.sources;
@@ -143,7 +139,7 @@ const Card: React.FC<{ title?: string; subtitle?: string; icon?: React.ReactNode
   </section>
 );
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
+export const SettingsPage: React.FC = () => {
   const [tab, setTab] = useState<Tab>('sources');
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [testStatus, setTestStatus] = useState<Record<string, { loading: boolean; success?: boolean; message?: string; latency?: number }>>({});
@@ -205,7 +201,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
     web_search_enabled: 'false',
     web_search_url: '',
     mcp_auth_token: '',
-    gateway_port: String(port),
+    gateway_port: String(getGatewayPort()),
     cache_ttl_hours: '24',
     max_results_default: '15',
     search_timeout_seconds: '12',
@@ -245,7 +241,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
     };
     loadConfig();
     return () => controller.abort();
-  }, [port, loadAttempt]);
+  }, [loadAttempt]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -1331,7 +1327,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
       {/* ---------------- Gateway & Security ---------------- */}
       {tab === 'gateway' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Card advanced title="Local Gateway Server" subtitle={`Serving at 127.0.0.1:${port} (REST + MCP)`} icon={<Server size={16} style={{ color: 'var(--primary-cyan)' }} />}>
+          <Card advanced title="Local Gateway Server" subtitle={`Serving at 127.0.0.1:${getGatewayPort()} (REST + MCP)`} icon={<Server size={16} style={{ color: 'var(--primary-cyan)' }} />}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span className="field-label" style={{ margin: 0 }}>Port (effective upon app restart)</span>
@@ -1366,9 +1362,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
               </label>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Delay queues cache-miss searches to prevent request bursts; cached pages remain instant. Timeout applies per source request. Changing the port requires a full restart.</p>
-            {config.gateway_port !== String(port) && (
+            {config.gateway_port !== String(getGatewayPort()) && (
               <div className="alert alert-warning" role="status">
-                Running on port {port}; configured port {config.gateway_port || '—'} takes effect after a full restart. MCP installs use the saved configured port.
+                Running on port {getGatewayPort()}; configured port {config.gateway_port || '—'} takes effect after a full restart. MCP installs use the saved configured port.
               </div>
             )}
           </Card>

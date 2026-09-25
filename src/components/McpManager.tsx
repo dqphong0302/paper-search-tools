@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getGatewayPort } from '../lib/gateway';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
 interface ConfigView {
@@ -9,8 +10,8 @@ interface ConfigView {
   backup?: string;
 }
 
-export const McpManager: React.FC<{ port: number }> = ({ port }) => {
-  const SAMPLE = JSON.stringify({ url: `http://127.0.0.1:${port}/mcp` }, null, 2);
+export const McpManager: React.FC = () => {
+  const SAMPLE = JSON.stringify({ url: `http://127.0.0.1:${getGatewayPort()}/mcp` }, null, 2);
   const [path, setPath] = useState('');
   const [view, setView] = useState<ConfigView | null>(null);
   const [name, setName] = useState('scholargate');

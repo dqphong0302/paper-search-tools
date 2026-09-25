@@ -25,9 +25,10 @@ import { EvidenceSynthesis } from './EvidenceSynthesis';
 import { evaluatePaper, getSourceGroup, SOURCE_GROUPS, SourceGroup } from '../lib/paperEvaluation';
 import { apaCitation, bibtexCitation } from '../lib/citation';
 import { getPaperKind, KIND_META, PaperKind } from '../lib/paperKind';
-import { gatewayFetch } from '../lib/gateway';
+import { gatewayFetch, getGatewayPort } from '../lib/gateway';
 import { canDownloadPdf, requestPdfDownload } from '../lib/pdfDownload';
 import { useSelection } from '../lib/useSelection';
+import { useWorkspace } from '../state/WorkspaceContext';
 import { bibtexLibrary, risLibrary } from '../lib/citation';
 import { SourceLimiterModal } from './SourceLimiterModal';
 import { FulltextViewerModal } from './FulltextViewerModal';
@@ -120,7 +121,6 @@ interface ExplorerProps {
   draftQuery?: string;
   onSubmitQuery?: (query: string) => void;
   searchNonce?: number;
-  port: number;
   /** The app-shell omnibox is the single search entry, so hide the in-page one. */
   hideSearchBar?: boolean;
   initialScope?: string;
@@ -133,10 +133,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
   draftQuery,
   onSubmitQuery,
   searchNonce = 0,
-  port,
   hideSearchBar = false,
   initialScope = 'default',
 }) => {
+  const { scopeId: workspaceScope } = useWorkspace();
   const [localQuery, setQuery] = useState(initialQuery || '');
   const query = draftQuery ?? localQuery;
   const [loading, setLoading] = useState(false);
@@ -283,6 +283,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
           year_max: yearMax ? Number(yearMax) : undefined,
           open_access_only: openAccessOnly,
           sources: sourcesParam,
+          workspace_id: workspaceScope,
         });
         const res = await gatewayFetch('/api/search', {
           method: 'POST',
@@ -302,14 +303,14 @@ export const Explorer: React.FC<ExplorerProps> = ({
         setResults(null);
         setError(
           err instanceof TypeError
-            ? `Could not reach the gateway at 127.0.0.1:${port}. Check that it is running.`
+            ? `Could not reach the gateway at 127.0.0.1:${getGatewayPort()}. Check that it is running.`
             : (err as Error).message || 'Search failed.'
         );
       } finally {
         if (requestId === latestSearchId.current) setLoading(false);
       }
     },
-    [port, yearMin, yearMax, resultLimit, oaOnly, customSources]
+    [yearMin, yearMax, resultLimit, oaOnly, customSources, workspaceScope]
   );
 
   // A query pushed in from another tab (dashboard, history) always re-runs.
@@ -472,7 +473,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     if (!canDownloadPdf(paper)) return;
     setDownloadingId(paper.id);
     setDownloadError(null);
-    const result = await requestPdfDownload(paper);
+    const result = await requestPdfDownload(paper, workspaceScope);
     setDownloadingId(null);
     if (!result.ok) {
       setDownloadError({ message: result.error, paper });
@@ -481,7 +482,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     }
     setDownloadSuccessId(paper.id);
     setTimeout(() => setDownloadSuccessId(null), 3000);
-  }, []);
+  }, [workspaceScope]);
 
   const openFulltextReader = useCallback((paper: Paper) => {
     setReaderPaper(paper);

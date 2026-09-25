@@ -8,12 +8,11 @@ interface AgentGatewayProps {
   telemetry: TelemetryStats | null;
   isOnline: boolean;
   onRefresh: () => void;
-  port: number;
 }
 
 type Section = 'status' | 'connect';
 
-export const AgentGateway: React.FC<AgentGatewayProps> = ({ telemetry, isOnline, onRefresh, port }) => {
+export const AgentGateway: React.FC<AgentGatewayProps> = ({ telemetry, isOnline, onRefresh }) => {
   const [section, setSection] = useState<Section>('connect');
 
   const tabs: { id: Section; label: string; icon: React.ReactNode }[] = [
@@ -63,7 +62,7 @@ export const AgentGateway: React.FC<AgentGatewayProps> = ({ telemetry, isOnline,
               </button>
             </div>
           )}
-          <AgentMonitor telemetry={telemetry} isOnline={isOnline} onRefresh={onRefresh} port={port} />
+          <AgentMonitor telemetry={telemetry} isOnline={isOnline} onRefresh={onRefresh} />
         </>
       )}
       {section === 'connect' && <AiClients />}

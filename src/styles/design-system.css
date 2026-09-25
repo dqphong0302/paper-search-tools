@@ -1955,3 +1955,24 @@ a.action-btn:hover {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
 }
 @media (max-width: 640px) { .floating-alert { right: 16px; bottom: 84px; } }
+
+/* ---- Shell & shared primitives ------------------------------------------ */
+.text-dim { color: var(--text-dim); }
+.text-muted { color: var(--text-muted); }
+.omnibox-icon { color: var(--primary-cyan); margin-left: 4px; flex-shrink: 0; }
+.action-btn-icon { padding: 6px 10px; }
+.cockpit-status-pill.status-rose { color: var(--status-rose); background: var(--status-rose-bg); border-color: var(--status-rose-border); }
+.cockpit-status-pill.status-rose .pulse-dot { background: var(--status-rose); }
+.page-alert { max-width: var(--content-max); margin: 0 auto 16px; width: 100%; box-sizing: border-box; }
+.alert > svg { flex-shrink: 0; margin-top: 2px; }
+.alert-actions { margin-left: auto; display: flex; gap: 8px; flex-shrink: 0; }
+
+.workspace-switcher { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 10px; border-bottom: 1px solid var(--cockpit-border); }
+.workspace-switcher-label { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; color: var(--text-dim); text-transform: uppercase; }
+.workspace-switcher-row { display: flex; gap: 6px; align-items: center; }
+.workspace-switcher select,
+.workspace-switcher input { flex: 1; min-width: 0; font-size: 12px; padding: 5px 8px; border: 1px solid var(--cockpit-border); border-radius: var(--radius-md); background: var(--cockpit-card); color: var(--text-main); }
+.workspace-switcher .action-btn { padding: 5px 8px; }
+.workspace-switcher-error { font-size: 11px; color: var(--status-rose); }
+.workspace-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.workspace-actions input { font-size: 12px; padding: 5px 8px; border: 1px solid var(--cockpit-border); border-radius: var(--radius-md); background: var(--cockpit-card); color: var(--text-main); }

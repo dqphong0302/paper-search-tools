@@ -10,6 +10,7 @@ import searchCatalog from './lib/searchCatalog.json';
 
 vi.mock('./lib/gateway', () => ({
   DEFAULT_GATEWAY_PORT: 8795,
+  getGatewayPort: () => 8795,
   initGateway: vi.fn(),
   gatewayFetch: vi.fn(),
   gatewayUrl: (path: string) => `http://localhost:8795${path}`,
@@ -71,7 +72,7 @@ describe('source health checks', () => {
   /** Reach the detailed card for one source, which is where Check lives. */
   async function openSource(id: string, name: string) {
     config();
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     await type('input[placeholder^="Filter"]', name);
     expect(host.querySelector(`#check-source-${id}`)).not.toBeNull();
   }
@@ -130,13 +131,13 @@ describe('default sources', () => {
 
   it('starts a fresh install on the default preset rather than no sources at all', async () => {
     config();
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     expect(activeSourceCount()).toBe(defaults.length);
   });
 
   it('restores the defaults after the selection was emptied', async () => {
     config({ domain_preset: 'custom', enabled_sources: '' });
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     expect(activeSourceCount()).toBe(0);
     await click('#restore-default-sources');
     expect(activeSourceCount()).toBe(defaults.length);
@@ -146,7 +147,7 @@ describe('default sources', () => {
   // source off; it now starts from whatever was active a moment earlier.
   it('carries the active sources over when switching to a custom selection', async () => {
     config({ domain_preset: 'biomedical', enabled_sources: '' });
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     const before = activeSourceCount();
     expect(before).toBeGreaterThan(0);
     await click('#preset-custom');
@@ -155,7 +156,7 @@ describe('default sources', () => {
 
   it('keeps distinct VJOL/SearXNG sources instead of substituting other connectors', async () => {
     config({ domain_preset: 'custom', enabled_sources: 'vjol,searxng' });
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     expect(activeSourceCount()).toBe(2);
     fetchMock.mockResolvedValueOnce(response({ success: true }));
     await click('#save-settings');
@@ -165,7 +166,7 @@ describe('default sources', () => {
 
   it('drops obsolete unavailable source IDs loaded from an older configuration', async () => {
     config({ domain_preset: 'custom', enabled_sources: 'openalex,papers_with_code,missing,openalex' });
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     expect(activeSourceCount()).toBe(1);
     fetchMock.mockResolvedValueOnce(response({ success: true }));
     await click('#save-settings');
@@ -258,7 +259,7 @@ describe('AI client setup', () => {
 describe('connection settings', () => {
   it('replaces a newly saved secret with the write-only sentinel in the form', async () => {
     config();
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
     await act(async () => { tabs.find((button) => button.textContent?.includes('Connections & Keys'))!.click(); });
     await type('#setting-openai_api_key', 'sk-new-secret');
@@ -270,7 +271,7 @@ describe('connection settings', () => {
 
   it('keeps every catalog credential in the controlled save payload', async () => {
     config();
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
     await act(async () => { tabs.find((button) => button.textContent?.includes('Connections & Keys'))!.click(); });
 
@@ -286,7 +287,7 @@ describe('connection settings', () => {
 
   it('exposes Groq and tests its saved key through the gateway', async () => {
     config({ groq_api_key: '__SG_KEEP__' });
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
     await act(async () => { tabs.find((button) => button.textContent?.includes('Connections & Keys'))!.click(); });
     expect(host.textContent).toContain('Groq');
@@ -300,7 +301,7 @@ describe('connection settings', () => {
 
   it('tests the dedicated web-search URL before saving', async () => {
     config({ web_search_url: 'http://localhost:8080' });
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
     await act(async () => { tabs.find((button) => button.textContent?.includes('Gateway & Security'))!.click(); });
     fetchMock.mockResolvedValueOnce(response({ success: true, message: 'Connected', latency_ms: 12 }));
@@ -313,7 +314,7 @@ describe('connection settings', () => {
 
   it('saves search pacing and the write-only outbound proxy setting', async () => {
     config({ search_delay_ms: '2500', proxy_enabled: 'false', proxy_url: '' });
-    await render(<SettingsPage port={8795} />);
+    await render(<SettingsPage />);
     const tabs = Array.from(host.querySelectorAll<HTMLButtonElement>('button'));
     await act(async () => { tabs.find((button) => button.textContent?.includes('Gateway & Security'))!.click(); });
     expect(host.querySelector<HTMLInputElement>('#search-delay-ms')?.value).toBe('2500');

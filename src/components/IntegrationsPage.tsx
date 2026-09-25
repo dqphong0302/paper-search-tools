@@ -13,7 +13,7 @@ interface SkillInfo {
   content: string;
 }
 
-export const IntegrationsPage: React.FC<{ port: number }> = ({ port }) => {
+export const IntegrationsPage: React.FC = () => {
   const native = isTauri();
   const [source, setSource] = useState('builtin:paper-search');
   const [targetRoot, setTargetRoot] = useState(() => localStorage.getItem('sg_skills_root') || '');
@@ -114,6 +114,6 @@ export const IntegrationsPage: React.FC<{ port: number }> = ({ port }) => {
         </div>
       </article>)}
     </section>
-    <McpManager port={port} />
+    <McpManager />
   </section>;
 };
