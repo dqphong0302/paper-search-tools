@@ -14,6 +14,7 @@ mod integrations;
 mod mcp;
 mod models;
 mod query;
+mod rankings;
 mod secrets;
 mod security;
 mod server;

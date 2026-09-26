@@ -502,6 +502,8 @@ impl Database {
         );",
         )?;
 
+        crate::rankings::create_schema(&conn)?;
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS search_cache (
                 query_hash TEXT PRIMARY KEY,
@@ -989,7 +991,8 @@ impl Database {
             .map_err(|error| error.to_string())?;
         let mut papers = Vec::new();
         for row in rows.flatten() {
-            if let Ok(paper) = serde_json::from_str::<Paper>(&row.0) {
+            if let Ok(mut paper) = serde_json::from_str::<Paper>(&row.0) {
+                crate::rankings::annotate(&conn, std::slice::from_mut(&mut paper));
                 papers.push(crate::models::WorkspacePaper {
                     paper,
                     note: row.1,

@@ -1847,6 +1847,8 @@ pub(crate) fn openalex_paper(item: &serde_json::Value, id_prefix: &str, source: 
             .as_array()
             .map(|list| list.iter().filter_map(|k| text(&k["display_name"])).collect())
             .unwrap_or_default(),
+        topic: text(&item["primary_topic"]["display_name"]),
+        field: text(&item["primary_topic"]["field"]["display_name"]),
     }
     .non_empty();
 
@@ -1922,6 +1924,7 @@ pub(crate) fn crossref_biblio(item: &serde_json::Value) -> Option<crate::models:
             .as_array()
             .map(|list| list.iter().filter_map(text).collect())
             .unwrap_or_default(),
+        ..Default::default()
     }
     .non_empty()
 }

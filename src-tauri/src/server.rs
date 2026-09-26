@@ -214,6 +214,13 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
                 .patch(update_workspace_note_handler)
                 .delete(remove_workspace_paper_handler),
         )
+        .route("/api/rankings", get(crate::rankings::status_handler))
+        .route("/api/rankings/update", post(crate::rankings::update_handler))
+        .route(
+            "/api/rankings/import",
+            // SCImago's full export is ~10 MB, above axum's 2 MB default.
+            post(crate::rankings::import_handler).layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)),
+        )
         .route("/api/source/check", post(source_check_handler))
         .route("/api/test-llm", post(test_llm_handler))
         .route("/api/test-searxng", post(test_searxng_handler))
@@ -1258,6 +1265,7 @@ pub(crate) async fn search_service(
     let cached = cached_search(&state.db, &query_hash, cache_ttl_seconds);
     if let Some(cached) = cached {
         let mut cached = cached.into_page(offset, limit);
+        crate::rankings::annotate(&state.db.conn(), &mut cached.papers);
         let elapsed = started.elapsed().as_millis() as u64;
         cached.elapsed_ms = elapsed;
         state.db.log_agent_query(&AgentLog {
@@ -1308,7 +1316,8 @@ pub(crate) async fn search_service(
 
     // Partial candidate pools keep pagination stable, but expire after 30s above.
     state.db.set_cache(&query_hash, &search_req.query, &resp);
-    let resp = resp.into_page(offset, limit);
+    let mut resp = resp.into_page(offset, limit);
+    crate::rankings::annotate(&state.db.conn(), &mut resp.papers);
 
     // Log query for Agent Telemetry
     state.db.log_agent_query(&AgentLog {
