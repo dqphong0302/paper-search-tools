@@ -1,13 +1,27 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Copy, FileDown, Loader2, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { Bot, Check, ChevronLeft, ChevronRight, Copy, FileDown, Loader2, ScanText, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { gatewayFetch } from '../lib/gateway';
+import { ExtractedPages, extractPages, loadPdf, OcrMode, saveFulltext, toMarkdown } from '../lib/pdfText';
+import { Paper } from '../types';
 
 interface PdfDocument {
   id: string;
   title: string;
+  paper_id?: string;
+  source?: string | null;
+  year?: number | null;
 }
+
+/** The download record carries enough to label the Markdown when no full paper record is at hand. */
+const paperFor = (document: PdfDocument): Paper => ({
+  id: document.paper_id || document.id,
+  title: document.title,
+  authors: [],
+  year: document.year ?? undefined,
+  source: document.source || 'download',
+  open_access: false,
+});
 
 export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: () => void }> = ({ document, onClose }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -18,6 +32,9 @@ export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: (
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [extracted, setExtracted] = useState<ExtractedPages | null>(null);
+  const [savedForAgents, setSavedForAgents] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,9 +50,7 @@ export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: (
       try {
         const response = await gatewayFetch(`/api/downloads/${encodeURIComponent(document.id)}/content`);
         if (!response.ok) throw new Error(`PDF could not be loaded (HTTP ${response.status})`);
-        const pdfjs = await import('pdfjs-dist');
-        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-        const loaded = await pdfjs.getDocument({ data: await response.arrayBuffer() }).promise;
+        const loaded = await loadPdf(await response.arrayBuffer());
         if (active) setPdf(loaded);
       } catch (cause) {
         if (active) setError((cause as Error).message);
@@ -69,23 +84,34 @@ export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: (
     return () => { cancelled = true; renderTask?.cancel(); };
   }, [pdf, pageNumber, scale]);
 
-  const extract = async () => {
+  const extract = async (ocr: OcrMode = 'auto') => {
     if (!pdf || extracting) return;
     setExtracting(true);
     setError('');
+    setSavedForAgents(false);
     try {
-      const pages: string[] = [];
-      for (let index = 1; index <= pdf.numPages; index += 1) {
-        const page = await pdf.getPage(index);
-        const content = await page.getTextContent();
-        pages.push(content.items.map((item) => ('str' in item ? item.str : '')).join(' ').replace(/\s+/g, ' ').trim());
-      }
-      setPageText(pages);
-      if (!pages.some(Boolean)) setError('No selectable text was found. This PDF may be scanned and require OCR.');
+      const result = await extractPages(pdf, {
+        ocr,
+        onProgress: ({ page, total, stage }) => setProgress(`${stage === 'ocr' ? 'OCR' : 'Reading'} page ${page}/${total}`),
+      });
+      setExtracted(result);
+      setPageText(result.pages);
+      if (!result.pages.some(Boolean)) setError('No text could be recognised in this PDF.');
     } catch (cause) {
       setError(`Text extraction failed: ${(cause as Error).message}`);
     } finally {
       setExtracting(false);
+      setProgress('');
+    }
+  };
+
+  const saveForAgents = async () => {
+    if (!document || !extracted) return;
+    try {
+      await saveFulltext(paperFor(document), extractedMarkdown, extracted);
+      setSavedForAgents(true);
+    } catch (cause) {
+      setError(`Could not save the Markdown for agents: ${(cause as Error).message}`);
     }
   };
 
@@ -95,9 +121,12 @@ export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: (
     return pageText.flatMap((text, index) => text.toLocaleLowerCase().includes(needle) ? [index + 1] : []);
   }, [pageText, query]);
 
-  const extractedMarkdown = useMemo(() => pageText.map((text, index) => `## Page ${index + 1}\n\n${text || '*No extractable text*'}`).join('\n\n'), [pageText]);
+  const extractedMarkdown = useMemo(
+    () => (document && extracted ? toMarkdown(paperFor(document), extracted) : ''),
+    [document, extracted]
+  );
   const saveExtraction = () => {
-    const blob = new Blob([`# ${document?.title ?? 'PDF'}\n\n${extractedMarkdown}\n`], { type: 'text/markdown;charset=utf-8' });
+    const blob = new Blob([extractedMarkdown], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = window.document.createElement('a');
     anchor.href = url;
@@ -121,8 +150,11 @@ export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: (
           <button className="action-btn" disabled={!pdf || scale <= 0.6} onClick={() => setScale((value) => Math.max(0.6, value - 0.2))}><ZoomOut size={14} /></button>
           <span style={{ fontSize: 12 }}>{Math.round(scale * 100)}%</span>
           <button className="action-btn" disabled={!pdf || scale >= 2.4} onClick={() => setScale((value) => Math.min(2.4, value + 0.2))}><ZoomIn size={14} /></button>
-          <button id="extract-pdf-text" className="action-btn action-btn-primary" disabled={!pdf || extracting} onClick={() => void extract()}>{extracting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}<span>{extracting ? 'Extracting…' : pageText.length ? 'Extract again' : 'Extract text'}</span></button>
+          <button id="extract-pdf-text" className="action-btn action-btn-primary" disabled={!pdf || extracting} onClick={() => void extract('auto')} title="Reads the text layer; scanned pages are OCR'd automatically">{extracting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}<span>{extracting ? progress || 'Extracting…' : pageText.length ? 'Extract again' : 'Extract text'}</span></button>
+          <button id="ocr-pdf-text" className="action-btn" disabled={!pdf || extracting} onClick={() => void extract('always')} title="Run OCR on every page (English + Vietnamese), for scans or broken text layers"><ScanText size={14} /><span>Force OCR</span></button>
           {pageText.length > 0 && <>
+            {extracted && extracted.method !== 'text' && <span className="badge badge-cyan" title="Pages recognised by OCR">OCR {extracted.ocrPages}/{extracted.pages.length}</span>}
+            <button id="save-fulltext-for-agents" className="action-btn" onClick={() => void saveForAgents()} title="Store this Markdown so MCP agents can read it with get_paper_fulltext">{savedForAgents ? <Check size={14} /> : <Bot size={14} />}<span>{savedForAgents ? 'Saved for agents' : 'Save for AI agents'}</span></button>
             <button className="action-btn" onClick={() => { void navigator.clipboard.writeText(extractedMarkdown).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1800); }); }}>{copied ? <Check size={14} /> : <Copy size={14} />}<span>{copied ? 'Copied' : 'Copy text'}</span></button>
             <button className="action-btn" onClick={saveExtraction}><FileDown size={14} /><span>Save Markdown</span></button>
             <label style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}><Search size={14} /><input className="field-input" aria-label="Search extracted PDF text" placeholder="Search extracted text" value={query} onChange={(event) => setQuery(event.target.value)} style={{ width: 220 }} /></label>

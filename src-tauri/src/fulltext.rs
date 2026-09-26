@@ -200,6 +200,75 @@ pub async fn index_handler(State(state): State<AppState>) -> Json<Value> {
     Json(json!(list(&state.db.conn())))
 }
 
+/// Where OCR language models are cached: next to the app database.
+fn tessdata_dir() -> Result<PathBuf, String> {
+    let base = match std::env::var("SCHOLARGATE_DATA_DIR") {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => PathBuf::from(
+            std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
+                .map_err(|_| "Cannot locate user data directory")?,
+        )
+        .join(".scholargate"),
+    };
+    let dir = base.join("tessdata");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// OCR language models ("vie.traineddata.gz"), downloaded once from the
+/// tesseract.js data CDN and then served locally, so OCR works offline and the
+/// app's content policy never has to allow a third-party origin.
+pub async fn ocr_language_handler(
+    Path(file): Path<String>,
+    State(state): State<AppState>,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let Some(lang) = file.strip_suffix(".traineddata.gz").filter(|lang| {
+        (3..=12).contains(&lang.len()) && lang.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+    }) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let dir = match tessdata_dir() {
+        Ok(dir) => dir,
+        Err(error) => return (StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
+    };
+    let path = dir.join(&file);
+    if !path.exists() {
+        let client = crate::engine::pooled_client(300, crate::config::outbound_proxy(&state.db).as_deref());
+        let mut fetched = None;
+        for url in [
+            format!("https://cdn.jsdelivr.net/npm/@tesseract.js-data/{lang}/4.0.0_best_int/{lang}.traineddata.gz"),
+            format!("https://unpkg.com/@tesseract.js-data/{lang}@1.0.0/4.0.0_best_int/{lang}.traineddata.gz"),
+        ] {
+            if let Ok(response) = client.get(&url).send().await {
+                if response.status().is_success() {
+                    if let Ok(bytes) = response.bytes().await {
+                        fetched = Some(bytes);
+                        break;
+                    }
+                }
+            }
+        }
+        let Some(bytes) = fetched else {
+            return (
+                StatusCode::BAD_GATEWAY,
+                format!("Could not download the OCR model for '{lang}'. Check the internet connection and try again."),
+            )
+                .into_response();
+        };
+        // Write-then-rename so a half-finished download is never served.
+        let partial = dir.join(format!("{file}.part"));
+        if std::fs::write(&partial, &bytes).and_then(|_| std::fs::rename(&partial, &path)).is_err() {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Could not cache the OCR model").into_response();
+        }
+    }
+    match std::fs::read(&path) {
+        Ok(bytes) => ([(axum::http::header::CONTENT_TYPE, "application/gzip")], bytes).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
 #[derive(Deserialize)]
 pub struct ExportRequest {
     /// Generated files to place at the bundle root (index.md, references.ris, …).

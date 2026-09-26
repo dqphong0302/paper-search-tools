@@ -221,6 +221,7 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
                 .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)),
         )
         .route("/api/fulltext/index", get(crate::fulltext::index_handler))
+        .route("/api/ocr/lang/{file}", get(crate::fulltext::ocr_language_handler))
         .route("/api/workspaces/{id}/export", post(crate::fulltext::export_handler).layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)))
         .route("/api/rankings", get(crate::rankings::status_handler))
         .route("/api/rankings/update", post(crate::rankings::update_handler))

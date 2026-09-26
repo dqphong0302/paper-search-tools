@@ -53,12 +53,15 @@ pub fn trusted_origin(origin: &HeaderValue, port: u16) -> bool {
     })
 }
 
-/// Endpoints reachable without a token: health probes and the sanitized config
-/// read (no secret values) so the UI can bootstrap and discover that a token is required.
+/// Endpoints reachable without a token: health probes, the sanitized config
+/// read (no secret values) so the UI can bootstrap and discover that a token is
+/// required, and public OCR language models, which the OCR web worker fetches
+/// without the UI's headers.
 fn is_public(method: &Method, path: &str) -> bool {
     method == Method::OPTIONS
         || matches!(path, "/health" | "/api/health")
         || (method == Method::GET && path == "/api/config")
+        || (method == Method::GET && path.starts_with("/api/ocr/lang/"))
 }
 
 pub async fn guard(
