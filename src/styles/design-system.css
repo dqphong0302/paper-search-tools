@@ -1999,3 +1999,17 @@ a.action-btn:hover {
 .collection-paper-title { display: block; color: var(--text-main); }
 .collection-paper-meta { display: block; font-size: 11.5px; color: var(--text-muted); }
 .collection-prompt { margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: var(--cockpit-bg, #f8fafc); border: 1px solid var(--cockpit-border); border-radius: var(--radius-sm); }
+
+/* A transformed ancestor becomes the containing block of position:fixed
+   children, which clipped the paper detail drawer inside its (hovered) card.
+   The card that owns the open drawer therefore never moves. */
+.paper-card.selected:hover,
+.compact-paper.selected,
+.compact-paper.selected:hover { transform: none; }
+
+/* Journal quartile badges, colour-coded Q1 (best) → Q4. */
+.badge-quartile { font-weight: 700; }
+.badge-quartile.q1 { background: var(--status-emerald-bg); color: #047857; border: 1px solid var(--status-emerald-border, #a7f3d0); }
+.badge-quartile.q2 { background: var(--primary-cyan-bg); color: #1d4ed8; border: 1px solid #bfdbfe; }
+.badge-quartile.q3 { background: var(--status-amber-bg); color: #b45309; border: 1px solid #fde68a; }
+.badge-quartile.q4 { background: var(--status-rose-bg); color: #be123c; border: 1px solid #fecdd3; }

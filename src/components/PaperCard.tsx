@@ -11,6 +11,8 @@ import {
   ABSTRACT_CLAMP, CitationDirection, CitationState, isVietnamPaper, originalPaperUrl,
   suggestedKeywords,
 } from './Explorer.shared';
+import { QuartileBadge } from './QuartileBadge';
+import { AddToCollectionMenu } from './AddToCollectionMenu';
 
 export interface PaperCardProps {
   paper: Paper;
@@ -182,7 +184,7 @@ function PaperCardImpl({
             >
               <Award size={11} /> SCREENING {evaluation.overall}/100
             </span>
-            {paper.quartile && <span className="badge badge-q1">{paper.quartile}</span>}
+            <QuartileBadge quartile={paper.quartile} />
             {paper.score !== undefined && (
               <span
                 className="badge"
@@ -368,6 +370,8 @@ function PaperCardImpl({
                   <GitBranch size={14} />
                   <span>{isCitationOpen ? 'Hide citations' : 'Citations & related'}</span>
                 </button>
+
+                <AddToCollectionMenu papers={[paper]} />
               </div>
 
               {canDownloadPdf(paper) && (

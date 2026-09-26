@@ -12,6 +12,7 @@ import { bibtexLibrary, risLibrary } from '../lib/citation';
 import { requestPdfDownload } from '../lib/pdfDownload';
 import { convertDownloadToMarkdown } from '../lib/pdfText';
 import { Library } from './Library';
+import { QuartileBadge } from './QuartileBadge';
 
 const QUARTILE_COLORS: Record<string, string> = {
   Q1: 'var(--status-emerald)',
@@ -343,7 +344,7 @@ export const Collections: React.FC = () => {
                           <span className="collection-paper-title">{paper.title}</span>
                           <span className="collection-paper-meta">
                             {[paper.year, paper.venue].filter(Boolean).join(' · ')}
-                            {paper.quartile && <span className="badge badge-q1" style={{ marginLeft: 6 }}>{paper.quartile}</span>}
+                            <QuartileBadge quartile={paper.quartile} style={{ marginLeft: 6 }} />
                             {pdfByPaper.has(paper.id) && <span className="badge badge-emerald" style={{ marginLeft: 6 }}>PDF</span>}
                             {markdownIds.has(paper.id) && <span className="badge badge-cyan" style={{ marginLeft: 6 }}>MD</span>}
                           </span>
