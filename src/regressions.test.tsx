@@ -17,6 +17,7 @@ import type { Paper, SearchResponse, WorkspacePaper } from './types';
 vi.mock('./lib/gateway', () => ({ DEFAULT_GATEWAY_PORT: 8795, initGateway: vi.fn(), gatewayFetch: vi.fn(), gatewayUrl: (path: string) => `http://localhost:8795${path}` }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 vi.mock('./components/SearchPage', () => ({ SearchPage: () => null }));
+vi.mock('./components/RankingsBanner', () => ({ RankingsBanner: () => null }));
 vi.mock('./components/AgentGateway', () => ({ AgentGateway: () => null }));
 vi.mock('./components/ClinicalSuite', () => ({ ClinicalSuite: () => null }));
 vi.mock('./components/SettingsPage', () => ({ SettingsPage: () => null }));

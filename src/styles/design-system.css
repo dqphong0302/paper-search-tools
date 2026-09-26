@@ -2013,3 +2013,28 @@ a.action-btn:hover {
 .badge-quartile.q2 { background: var(--primary-cyan-bg); color: #1d4ed8; border: 1px solid #bfdbfe; }
 .badge-quartile.q3 { background: var(--status-amber-bg); color: #b45309; border: 1px solid #fde68a; }
 .badge-quartile.q4 { background: var(--status-rose-bg); color: #be123c; border: 1px solid #fecdd3; }
+.rankings-banner { display: flex; gap: 10px; align-items: flex-start; }
+
+/* Collection batch jobs */
+.collection-job { border: 1px solid var(--cockpit-border); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--cockpit-card); display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.collection-job-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.collection-job-bar { height: 6px; border-radius: 999px; background: var(--cockpit-bg); overflow: hidden; }
+.collection-job-bar > span { display: block; height: 100%; background: var(--primary-cyan); transition: width 0.3s ease; }
+.collection-job-detail { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.collection-failures summary { display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 600; }
+.collection-failures ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.collection-failures li { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.collection-failures a { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+
+/* Discipline: pills on wide screens, a dropdown on phones. */
+.quick-discipline-select { display: none; align-items: center; gap: 6px; flex: 1; min-width: 0; font-size: 11.5px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; }
+.quick-discipline-select select { flex: 1; min-width: 0; text-transform: none; font-weight: 500; }
+@media (max-width: 640px) {
+  .quick-discipline-select { display: flex; }
+  .quick-pill-row { display: none !important; }
+}
+.collection-failures { display: block; }
+@media (max-width: 640px) {
+  .discipline-bar { flex-wrap: wrap !important; }
+  .quick-discipline-select { flex: 1 1 100%; }
+}

@@ -1,13 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Award, Bot, Check, Copy, DownloadCloud, FileText, FolderOpen, FolderPlus, Layers, Loader2, Pencil, Trash2,
+  AlertTriangle, Award, BarChart3, Bot, Check, Copy, DownloadCloud, ExternalLink, FileText, FolderOpen, FolderPlus,
+  Layers, ListChecks, Loader2, Pencil, Square, Trash2,
 } from 'lucide-react';
 import { Workspace, WorkspacePaper } from '../types';
 import {
   agentHandoffPrompt, collectionPapers, createCollection, deleteCollection, downloadIndex, exportCollection,
   ExportResult, fulltextIndex, GROUP_LABELS, GroupBy, groupPapers, INTEREST_LIBRARY_ID, listCollections,
-  removeFromCollection, renameCollection, summarizeCollection, summaryMarkdown, updateCollectionPaper,
+  removeFromCollection, renameCollection, runPool, summarizeCollection, summaryMarkdown, updateCollectionPaper,
 } from '../lib/collections';
+import { RankingsBanner } from './RankingsBanner';
+import { Paper } from '../types';
 import { bibtexLibrary, risLibrary } from '../lib/citation';
 import { requestPdfDownload } from '../lib/pdfDownload';
 import { convertDownloadToMarkdown } from '../lib/pdfText';
@@ -53,6 +56,10 @@ export const Collections: React.FC = () => {
   const [error, setError] = useState('');
   const [exported, setExported] = useState<ExportResult | null>(null);
   const [copied, setCopied] = useState<'prompt' | 'path' | 'synthesis' | null>(null);
+  const [view, setView] = useState<'overview' | 'papers' | 'agent'>('overview');
+  const [job, setJob] = useState<{ done: number; total: number } | null>(null);
+  const [failures, setFailures] = useState<{ paper: Paper; reason: string }[]>([]);
+  const stopRef = useRef(false);
 
   const active = collections.find((collection) => collection.id === activeId) ?? null;
 
@@ -131,41 +138,59 @@ export const Collections: React.FC = () => {
   const missingPdf = items.filter((item) => !pdfByPaper.has(item.paper.id) && (item.paper.pdf_url || item.paper.doi));
   const missingMarkdown = items.filter((item) => pdfByPaper.has(item.paper.id) && !markdownIds.has(item.paper.id));
 
+  const articleUrl = (paper: Paper) => paper.source_url || (paper.doi ? `https://doi.org/${paper.doi}` : undefined);
+
+  const startJob = (kind: 'pdf' | 'markdown', total: number) => {
+    stopRef.current = false;
+    setBusy(kind); setError(''); setFailures([]); setJob({ done: 0, total });
+  };
+  const finishJob = async (message: string) => {
+    await loadStatus();
+    setBusy(null); setProgress(''); setJob(null);
+    flash(stopRef.current ? `Stopped. ${message}` : message);
+  };
+  const tick = () => setJob((current) => (current ? { ...current, done: current.done + 1 } : current));
+
+  // Downloads are network-bound, so three run at once.
   const collectPdfs = async () => {
     if (!active) return;
-    setBusy('pdf'); setError('');
+    const queue = missingPdf;
+    startJob('pdf', queue.length);
     let done = 0;
-    const failed: string[] = [];
-    for (const [index, item] of missingPdf.entries()) {
-      setProgress(`Downloading PDF ${index + 1}/${missingPdf.length}: ${item.paper.title.slice(0, 60)}`);
+    await runPool(queue, 3, async (item) => {
+      setProgress(item.paper.title.slice(0, 80));
       const result = await requestPdfDownload(item.paper, active.id);
-      if (result.ok) done += 1; else failed.push(item.paper.title);
-    }
-    await loadStatus();
-    setBusy(null); setProgress('');
-    flash(`Collected ${done} of ${missingPdf.length} PDFs.${failed.length ? ` ${failed.length} had no downloadable open-access copy — open their article pages instead.` : ''}`);
+      if (result.ok) done += 1;
+      else setFailures((list) => [...list, { paper: item.paper, reason: result.error }]);
+      tick();
+    }, () => stopRef.current);
+    await finishJob(`Collected ${done} of ${queue.length} PDFs.`);
   };
 
+  // OCR is CPU-bound and shares one Tesseract worker, so papers go one at a time.
   const convertAll = async () => {
-    setBusy('markdown'); setError('');
+    const queue = missingMarkdown;
+    startJob('markdown', queue.length);
     let done = 0;
-    for (const [index, item] of missingMarkdown.entries()) {
+    await runPool(queue, 1, async (item) => {
       const downloadId = pdfByPaper.get(item.paper.id);
-      if (!downloadId) continue;
+      if (!downloadId) return;
       try {
         await convertDownloadToMarkdown(downloadId, item.paper, {
           ocr: 'auto',
+          shouldStop: () => stopRef.current,
           onProgress: ({ page, total, stage }) =>
-            setProgress(`Paper ${index + 1}/${missingMarkdown.length} · ${stage === 'ocr' ? 'OCR' : 'reading'} page ${page}/${total}`),
+            setProgress(`${item.paper.title.slice(0, 60)} · ${stage === 'ocr' ? 'OCR' : 'reading'} page ${page}/${total}`),
         });
         done += 1;
       } catch (cause) {
-        setError(`“${item.paper.title}”: ${(cause as Error).message}`);
+        if ((cause as Error).name !== 'AbortError') {
+          setFailures((list) => [...list, { paper: item.paper, reason: (cause as Error).message }]);
+        }
       }
-    }
-    await loadStatus();
-    setBusy(null); setProgress('');
-    flash(`Converted ${done} of ${missingMarkdown.length} PDFs to Markdown.`);
+      tick();
+    }, () => stopRef.current);
+    await finishJob(`Converted ${done} of ${queue.length} PDFs to Markdown.`);
   };
 
   const synthesis = active ? summaryMarkdown(active.name, summary, groups, groupBy) : '';
@@ -264,11 +289,41 @@ export const Collections: React.FC = () => {
               {busy === 'export' ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
               <span>3 · Export folder for AI</span>
             </button>
-            <a href="#collection-handoff" className="action-btn action-btn-primary" style={{ textDecoration: 'none' }}>
+            <button type="button" className="action-btn action-btn-primary" onClick={() => setView('agent')}>
               <Bot size={14} /><span>4 · Hand off to agent</span>
-            </a>
-            {progress && <span role="status" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{progress}</span>}
+            </button>
           </div>
+          {job && (
+            <div className="collection-job" role="status" aria-live="polite">
+              <div className="collection-job-head">
+                <span>
+                  <b>{busy === 'pdf' ? 'Collecting PDFs' : 'Converting to Markdown'}</b> · {job.done}/{job.total}
+                  {stopRef.current ? ' · stopping after the current item…' : ''}
+                </span>
+                <button id="stop-job" type="button" className="action-btn" onClick={() => { stopRef.current = true; setJob((j) => (j ? { ...j } : j)); }} disabled={stopRef.current}>
+                  <Square size={12} /> Stop
+                </button>
+              </div>
+              <div className="collection-job-bar"><span style={{ width: `${job.total ? (job.done / job.total) * 100 : 0}%` }} /></div>
+              {progress && <div className="collection-job-detail">{progress}</div>}
+            </div>
+          )}
+          {failures.length > 0 && !job && (
+            <details className="alert alert-warning collection-failures" open={failures.length <= 5}>
+              <summary><AlertTriangle size={14} /> {failures.length} paper{failures.length === 1 ? '' : 's'} could not be processed</summary>
+              <ul>
+                {failures.map(({ paper, reason }) => (
+                  <li key={paper.id}>
+                    <b>{paper.title}</b>
+                    <span>{reason}</span>
+                    {articleUrl(paper) && (
+                      <a href={articleUrl(paper)} target="_blank" rel="noreferrer"><ExternalLink size={12} /> Article page</a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           {exported && (
             <div className="alert alert-info" role="status" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <span>Exported {exported.papers} papers ({exported.pdfs} PDFs, {exported.markdown} Markdown) to <code>{exported.path}</code></span>
@@ -276,8 +331,22 @@ export const Collections: React.FC = () => {
             </div>
           )}
 
+          <div className="segmented" role="tablist" aria-label="Collection views" style={{ alignSelf: 'flex-start' }}>
+            {([
+              ['overview', 'Overview', <BarChart3 key="o" size={14} />],
+              ['papers', 'Papers', <ListChecks key="p" size={14} />],
+              ['agent', 'AI agent', <Bot key="a" size={14} />],
+            ] as const).map(([id, label, icon]) => (
+              <button key={id} id={`collection-view-${id}`} type="button" role="tab" aria-selected={view === id}
+                className={`segmented-item ${view === id ? 'active' : ''}`} onClick={() => setView(id)}>
+                {icon}<span>{label}</span>{id === 'papers' && <span className="segmented-count">{items.length}</span>}
+              </button>
+            ))}
+          </div>
+
           {/* ---- Synthesis ---- */}
-          <section className="cockpit-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }} aria-labelledby="synthesis-heading">
+          {view === 'overview' && <RankingsBanner onLoaded={() => void loadPapers(activeId)} />}
+          {view === 'overview' && <section className="cockpit-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }} aria-labelledby="synthesis-heading">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <h3 id="synthesis-heading" style={{ margin: 0, fontSize: 15 }}>Synthesis</h3>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginLeft: 'auto', whiteSpace: 'nowrap' }}>
@@ -355,10 +424,10 @@ export const Collections: React.FC = () => {
                 ))}
               </div>
             )}
-          </section>
+          </section>}
 
           {/* ---- Agent hand-off ---- */}
-          <section id="collection-handoff" className="cockpit-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }} aria-labelledby="handoff-heading">
+          {view === 'agent' && <section id="collection-handoff" className="cockpit-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }} aria-labelledby="handoff-heading">
             <h3 id="handoff-heading" style={{ margin: 0, fontSize: 15 }}><Bot size={15} style={{ verticalAlign: -2 }} /> Hand off to an AI agent</h3>
             <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
               Agents connected to ScholarGate over MCP (Claude, Codex, Cursor… — set up in <b>Settings → AI Clients</b>) read this collection with
@@ -378,10 +447,10 @@ export const Collections: React.FC = () => {
                 {copied === 'prompt' ? <Check size={13} /> : <Copy size={13} />} {copied === 'prompt' ? 'Copied' : 'Copy prompt'}
               </button>
             </div>
-          </section>
+          </section>}
 
           {/* ---- Papers ---- */}
-          <Library
+          {view === 'papers' && <Library
             workspacePapers={items}
             workspaceName={active.name}
             workspaceId={active.id}
@@ -394,7 +463,7 @@ export const Collections: React.FC = () => {
                 .then(() => setItems((current) => current.map((item) => (item.paper.id === paperId ? { ...item, ...patch } : item))))
                 .catch((cause) => setError((cause as Error).message));
             }}
-          />
+          />}
         </>
       )}
     </div>

@@ -26,6 +26,8 @@ export interface ExtractOptions {
   /** Tesseract language codes joined with "+", e.g. "eng+vie". */
   languages?: string;
   onProgress?: (progress: { page: number; total: number; stage: 'text' | 'ocr' }) => void;
+  /** Checked before each page; when it returns true extraction stops with an AbortError. */
+  shouldStop?: () => boolean;
 }
 
 export interface ExtractedPages {
@@ -173,6 +175,7 @@ export async function extractPages(pdf: PDFDocumentProxy, options: ExtractOption
   const pages: string[] = [];
   let ocrPages = 0;
   for (let number = 1; number <= pdf.numPages; number += 1) {
+    if (options.shouldStop?.()) throw new DOMException('Extraction stopped', 'AbortError');
     const page = await pdf.getPage(number);
     options.onProgress?.({ page: number, total: pdf.numPages, stage: 'text' });
     let text = mode === 'always' ? '' : await pageText(page);

@@ -85,6 +85,29 @@ export interface DownloadInfo {
 
 export const downloadIndex = () => request<DownloadInfo[]>('/api/history/downloads');
 
+// ---- Batch jobs ---------------------------------------------------------------
+
+/**
+ * Runs `worker` over `items` with at most `concurrency` in flight, and stops
+ * taking new items once `shouldStop()` turns true (items already running finish).
+ */
+export async function runPool<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>,
+  shouldStop: () => boolean = () => false
+): Promise<void> {
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length && !shouldStop()) {
+      const index = next;
+      next += 1;
+      await worker(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, lane));
+}
+
 // ---- Grouping ---------------------------------------------------------------
 
 export type GroupBy = 'none' | 'quartile' | 'topic' | 'field' | 'year' | 'source' | 'status' | 'kind';

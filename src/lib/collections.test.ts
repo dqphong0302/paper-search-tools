@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Paper, Workspace, WorkspacePaper } from '../types';
-import { agentHandoffPrompt, groupPapers, summarizeCollection, summaryMarkdown } from './collections';
+import { agentHandoffPrompt, groupPapers, runPool, summarizeCollection, summaryMarkdown } from './collections';
 
 const item = (id: string, extra: Partial<Paper> = {}): WorkspacePaper => ({
   paper: { id, title: `Paper ${id}`, authors: [], source: 'OpenAlex', open_access: false, ...extra },
@@ -45,5 +45,23 @@ describe('collections', () => {
     expect(prompt).toContain('get_paper_fulltext');
     expect(prompt).toContain('/tmp/review');
     expect(prompt.endsWith('Task: Compare efficacy')).toBe(true);
+  });
+
+  it('runs a pool with bounded concurrency and stops taking new items', async () => {
+    let running = 0;
+    let peak = 0;
+    const seen: number[] = [];
+    await runPool([1, 2, 3, 4, 5, 6], 3, async (n) => {
+      running += 1; peak = Math.max(peak, running);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      seen.push(n); running -= 1;
+    });
+    expect(peak).toBe(3);
+    expect(seen.sort()).toEqual([1, 2, 3, 4, 5, 6]);
+
+    const done: number[] = [];
+    let stop = false;
+    await runPool([1, 2, 3, 4], 1, async (n) => { done.push(n); if (n === 2) stop = true; }, () => stop);
+    expect(done).toEqual([1, 2]);
   });
 });
