@@ -180,6 +180,7 @@ async fn scope_rest(
             workspace_allowed(grant, &query("workspace_id")?, false)
         }
         ("GET", "/api/citations") => paper_allowed(&state.db, grant, &query("id")?),
+        ("GET", "/api/fulltext") => paper_allowed(&state.db, grant, &query("paper_id")?),
         _ if parts.len() == 5
             && parts[1] == "api"
             && parts[2] == "workspaces"

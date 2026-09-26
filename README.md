@@ -135,7 +135,7 @@ Codex uses `[mcp_servers.scholargate]` with the same `/mcp` URL and `bearer_toke
 - `sources` accepts source or preset IDs from `get_search_catalog`; `[]` disables all of them; the old aliases `auto`/`all`/`international`/`vjol`/`searxng` are still accepted.
 - `search_academic_papers`, `get_workspace`, `get_citations` and `get_paper_details` accept `fields` to select metadata. The default list omits abstracts; details default to everything. ID, title, source, source URL and DOI are always kept. Search also returns `next_offset`; source status and errors are never truncated. Saving a trimmed paper uses the full record from the library/cache when one exists.
 - `search_web` only uses the dedicated web connector (category `general`); snippets are untrusted content, not peer-reviewed evidence.
-- Verified with the **official MCP TypeScript SDK** (`pnpm mcp:check`): connect → `tools/list` (8 tools) → `get_search_catalog` → `list_workspaces` → `get_workspace`, with and without a token. The app must be running for an agent to connect.
+- Verified with the **official MCP TypeScript SDK** (`pnpm mcp:check`): connect → `tools/list` (13 tools) → `get_search_catalog` → `list_workspaces` → `get_workspace`, with and without a token. The app must be running for an agent to connect.
 
 ### REST from Python
 ```python

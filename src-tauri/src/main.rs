@@ -10,6 +10,7 @@ mod config;
 mod db;
 mod details;
 mod engine;
+mod fulltext;
 mod integrations;
 mod mcp;
 mod models;

@@ -214,6 +214,14 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
                 .patch(update_workspace_note_handler)
                 .delete(remove_workspace_paper_handler),
         )
+        .route(
+            "/api/fulltext",
+            get(crate::fulltext::get_handler)
+                .put(crate::fulltext::put_handler)
+                .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)),
+        )
+        .route("/api/fulltext/index", get(crate::fulltext::index_handler))
+        .route("/api/workspaces/{id}/export", post(crate::fulltext::export_handler).layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)))
         .route("/api/rankings", get(crate::rankings::status_handler))
         .route("/api/rankings/update", post(crate::rankings::update_handler))
         .route(

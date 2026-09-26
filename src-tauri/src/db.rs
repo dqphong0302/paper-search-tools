@@ -503,6 +503,7 @@ impl Database {
         )?;
 
         crate::rankings::create_schema(&conn)?;
+        crate::fulltext::create_schema(&conn)?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS search_cache (

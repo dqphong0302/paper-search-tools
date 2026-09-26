@@ -155,7 +155,11 @@ pub fn tool_allowed(db: &Database, grant: &Grant, name: &str, args: &Value) -> b
                     .as_str()
                     .is_some_and(|id| paper_allowed(db, grant, id))
         }
-        "get_paper_details" | "get_citations" => args["paper_id"]
+        // Writes files to the user's disk, so it needs a write grant.
+        "export_collection" => args["workspace_id"]
+            .as_str()
+            .is_some_and(|id| workspace_allowed(grant, id, true)),
+        "get_paper_details" | "get_citations" | "get_paper_fulltext" => args["paper_id"]
             .as_str()
             .is_some_and(|id| paper_allowed(db, grant, id)),
         _ => false,
