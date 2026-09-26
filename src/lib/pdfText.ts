@@ -1,6 +1,8 @@
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+// The legacy build polyfills newer JS (e.g. Map.getOrInsertComputed) that
+// older system WebViews lack; the modern build fails there on image-only pages.
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import ocrWorkerUrl from 'tesseract.js/dist/worker.min.js?url';
 import ocrCoreSimdUrl from 'tesseract.js-core/tesseract-core-simd-lstm.wasm.js?url';
 import ocrCoreUrl from 'tesseract.js-core/tesseract-core-lstm.wasm.js?url';
@@ -38,7 +40,7 @@ const MIN_TEXT_CHARS = 40;
 export const DEFAULT_OCR_LANGUAGES = 'eng+vie';
 
 export async function loadPdf(data: ArrayBuffer): Promise<PDFDocumentProxy> {
-  const pdfjs = await import('pdfjs-dist');
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
   return pdfjs.getDocument({ data }).promise;
 }

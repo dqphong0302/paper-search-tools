@@ -1,9 +1,10 @@
 import React, { lazy, Suspense, useState } from 'react';
-import { Bookmark, DownloadCloud, History } from 'lucide-react';
+import { Bookmark, DownloadCloud, History, Layers } from 'lucide-react';
 import { WorkspacePaper, WorkspacePaperPatch } from '../types';
 import { Library } from './Library';
 import { DownloadHistory } from './DownloadHistory';
 import { SearchHistory } from './SearchHistory';
+const Collections = lazy(() => import('./Collections').then((module) => ({ default: module.Collections })));
 const ClinicalSuite = lazy(() => import('./ClinicalSuite').then((module) => ({ default: module.ClinicalSuite })));
 
 interface ResearchLibraryProps {
@@ -14,7 +15,7 @@ interface ResearchLibraryProps {
   port: number;
 }
 
-type Section = 'library' | 'downloads' | 'history' | 'analysis';
+type Section = 'library' | 'collections' | 'downloads' | 'history' | 'analysis';
 
 export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({
   papers,
@@ -26,6 +27,7 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({
   const [section, setSection] = useState<Section>('library');
   const tabs: { id: Section; label: string; icon: React.ReactNode; count?: number }[] = [
     { id: 'library', label: 'Papers of interest', icon: <Bookmark size={14} />, count: papers.length },
+    { id: 'collections', label: 'Collections', icon: <Layers size={14} /> },
     { id: 'downloads', label: 'Downloaded PDFs', icon: <DownloadCloud size={14} /> },
     { id: 'history', label: 'Search history', icon: <History size={14} /> },
     { id: 'analysis', label: 'Analysis tools', icon: <Bookmark size={14} /> },
@@ -34,8 +36,8 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({
   return (
     <div className="page-container" style={{ gap: 14 }}>
       <div>
-        <h2 className="page-title"><Bookmark size={17} /> Interest Library</h2>
-        <p className="page-subtitle">The papers you marked while searching.</p>
+        <h2 className="page-title"><Bookmark size={17} /> Library</h2>
+        <p className="page-subtitle">Papers you marked while searching, and the collections you hand to AI agents.</p>
       </div>
 
       <div role="tablist" aria-label="Library sections" className="segmented" style={{ alignSelf: 'flex-start' }}>
@@ -56,6 +58,7 @@ export const ResearchLibrary: React.FC<ResearchLibraryProps> = ({
         ))}
       </div>
 
+      {section === 'collections' && <Suspense fallback={<div role="status">Loading collections…</div>}><Collections /></Suspense>}
       {section === 'library' && <Library workspacePapers={papers} onRemovePaper={onRemovePaper} onUpdatePaper={onUpdatePaper} workspaceName="Interest Library" />}
       {section === 'downloads' && <DownloadHistory port={port} />}
       {section === 'history' && <SearchHistory onRerunSearch={onRerunSearch} port={port} />}

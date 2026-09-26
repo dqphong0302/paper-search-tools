@@ -241,8 +241,10 @@ fn store(state: &crate::server::AppState, text: &str) -> (StatusCode, Json<Value
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let _ = state.db.set_config("sjr_imported_at", &now.to_string());
-    let _ = state.db.set_config("sjr_year", &year.map(|y| y.to_string()).unwrap_or_default());
+    let _ = state.db.set_config_patch(&std::collections::BTreeMap::from([
+        ("sjr_imported_at".to_string(), now.to_string()),
+        ("sjr_year".to_string(), year.map(|y| y.to_string()).unwrap_or_default()),
+    ]));
     (StatusCode::OK, Json(status_json(state)))
 }
 

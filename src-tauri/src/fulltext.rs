@@ -318,6 +318,9 @@ pub fn export(
     }
 
     let papers = state.db.workspace_papers(&workspace.id)?;
+    if !files.contains_key("index.md") {
+        std::fs::write(root.join("index.md"), index_markdown(workspace, &papers)).map_err(|e| e.to_string())?;
+    }
     let downloads = state.db.get_download_history(None);
     let (mut pdfs, mut markdown) = (0, 0);
     for (index, item) in papers.iter().enumerate() {

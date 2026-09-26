@@ -22,10 +22,21 @@ ScholarGate combines two jobs in one fully local app (macOS/Windows/Linux — no
 - SQLite cache with a configurable TTL, query history and telemetry.
 - **Per-source health check**: each source has a Check button that sends one real query and reports what came back — result count, latency, or the source's own error. It deliberately bypasses the response cache and the failure breaker, so the answer describes the source right now.
 
+### Collections: from search to an AI-ready corpus
+**Library → Collections** turns a set of papers into something an agent can research with:
+
+1. **Gather** — tick papers in Search or *Papers of interest* and choose **Add to collection** (or create a new one from the same menu).
+2. **Collect PDFs** — downloads every missing PDF; when a link is blocked or absent, the gateway tries other open-access copies of the DOI (OpenAlex, Unpaywall).
+3. **Convert to Markdown** — each PDF's text layer is rebuilt into paragraphs (hyphenation repaired); pages without text are **OCR'd locally with Tesseract (English + Vietnamese)**. The Markdown carries YAML front matter (title, authors, year, journal, quartile, DOI, topic, extraction method) and is stored for agents. The OCR model is downloaded once and then works offline.
+4. **Synthesis & grouping** — counts, year range, open-access / PDF / Markdown coverage, **journal quartile distribution (Q1–Q4)**, topics, journals and frequent terms; group papers by quartile, OpenAlex topic or field, year, source group, reading status or record kind; copy the synthesis as Markdown.
+5. **Hand off** — export a folder (`index.md`, `synthesis.md`, `references.ris/.bib`, `pdf/`, `markdown/`) and/or copy a ready prompt that tells an MCP agent to read the collection with `get_collection` and each full text with `get_paper_fulltext`.
+
+**Journal quartiles** come from the free **SCImago Journal Rank (SJR)** table: load it once in *Settings → Gateway & Security → Journal Rankings* (download directly, or import the CSV from scimagojr.com). Papers are matched by ISSN, then by exact journal title; unmatched journals stay blank rather than guessed.
+
 ### Per-project research workspaces
 - Create/rename/delete **workspaces**; each saved paper carries a **note**, **reading status** (unread/reading/read), **favourite** flag and **tags**; one paper can belong to several workspaces.
 - Search queries (which can be **saved**) and downloaded PDFs are recorded per workspace; review the whole project in the **Library** tab.
-- Downloaded papers open in a built-in **PDF reader** with page navigation, zoom, local full-text extraction, search, copy and Markdown export. Files never leave the machine; image-only scans are reported as requiring OCR.
+- Downloaded papers open in a built-in **PDF reader** with page navigation, zoom, local full-text extraction (with automatic or forced OCR), search, copy, Markdown export and **Save for AI agents**. Files never leave the machine.
 - **Portable backup and restore** preserves workspaces, papers, notes, tags, reading state and history without exporting API keys, tokens, agent credentials, cache or PDF binaries.
 - **Hand-off to an agent**: copy the `workspace_id` plus instructions; the agent reads the whole project through the MCP `get_workspace` tool and keeps searching with the same `workspace_id`.
 - The default workspace adopts any papers saved before workspaces existed.
@@ -69,11 +80,11 @@ The interface is **English throughout**, including preset and source-group names
 | Workspace | Contents |
 |---|---|
 | **Search** | **Academic Papers / Academic Web** toggle. An overview landing page before the first query; Explorer once there are results (filter by source, year, OA, sort, download PDFs, mark papers of interest, export ticked results as .RIS/.bib, "Load more"). Results sit directly under the filter bar; the two analysis panels (**Document Overview**, **Sample Audit & Landscape**) sit **below** the list and are collapsed by default. |
-| **Library** | The **Interest Library**: papers marked with **Interest** (notes, tags, reading status, .RIS/.bib export, batch PDF download), downloaded PDFs, search history, and the research tools. |
+| **Library** | **Papers of interest** (notes, tags, reading status, .RIS/.bib export, batch PDF download), **Collections** (collect PDFs, OCR to Markdown, quartile/topic grouping, synthesis, agent hand-off), downloaded PDFs, search history, and the research tools. |
 | **Connections** | Per-workspace agent access; MCP & skills; gateway activity. |
 | **Settings** | Four groups: **Search Sources** (presets, enable/disable, credential readiness, per-source health checks), **Connections & Keys** (LLM providers, source credentials, MetaSearch/SearXNG), **AI Clients** (install MCP + skills into Claude, Codex, Antigravity), **Gateway & Security** (token, port, rate limit, timeout, cache, download directory, Update Center, backup/restore). |
 
-The desktop UI works on a single **Interest Library** (the default workspace). Additional workspaces are created and used through the REST API and MCP tools (`/api/workspaces`, `list_workspaces`, `get_workspace`, `save_paper_to_workspace`), which is how agents keep per-project results apart.
+*Papers of interest* is the default workspace; every **collection** is another workspace, so REST (`/api/workspaces`) and MCP (`list_collections`, `get_collection`, `add_paper_to_collection`) see the same sets the app shows.
 
 ---
 
@@ -118,7 +129,7 @@ Streamable HTTP endpoint: `http://127.0.0.1:8795/mcp` (add the header only if a 
 
 Codex uses `[mcp_servers.scholargate]` with the same `/mcp` URL and `bearer_token_env_var = "SCHOLARGATE_TOKEN"`. Antigravity uses its documented SSE shape instead: `{ "serverUrl": "http://127.0.0.1:8795/sse" }`. Drop `headers` when no token is set.
 
-**The 8 MCP tools:**
+**The 13 MCP tools:**
 
 | Tool | Parameters | Purpose |
 |---|---|---|
@@ -130,6 +141,13 @@ Codex uses `[mcp_servers.scholargate]` with the same `/mcp` URL and `bearer_toke
 | `get_workspace` | `workspace_id`, `query_limit`, `limit`, `offset`, `fields` | Read a project page by page; 20 papers and 5 queries on the first page by default; follow `next_offset` until it is `null`. |
 | `save_paper_to_workspace` | `workspace_id`, `paper`, `note` | Save a paper into a workspace; saving the same paper again updates the note. |
 | `search_web` | `query`, `limit` | General web search through the configured SearXNG connector (not papers). |
+| `list_collections` | — | The user's collections (workspaces) with paper and query counts. |
+| `get_collection` | `collection_id`, `limit`, `offset` | Papers with notes, tags, quartile, topic and a `fulltext` summary when Markdown exists; follow `next_offset`. |
+| `add_paper_to_collection` | `collection_id`, `paper`, `note` | Add a search result to a collection. |
+| `get_paper_fulltext` | `paper_id`, `offset`, `max_chars` | A paper's Markdown full text (text layer or OCR) in chunks; follow `next_offset`. |
+| `export_collection` | `collection_id` | Write the collection folder (index.md, pdf/, markdown/) and return its path; needs a write grant. |
+
+`list_workspaces`, `get_workspace` and `save_paper_to_workspace` remain callable for older clients; the collection tools are the same operations under the name the app uses.
 
 - `search_academic_papers` returns `total`, `available_total`, `papers[]`, `sources[]` (per-source status), `elapsed_ms` and `cache_hit`. `offset` (0–10000) pages through one ranked, cached result set instead of re-querying the sources for each page. `available_total` is a **lower bound**: each source contributes at most 100 records (some connectors cap lower). Changing a source credential selects a different cache entry.
 - `sources` accepts source or preset IDs from `get_search_catalog`; `[]` disables all of them; the old aliases `auto`/`all`/`international`/`vjol`/`searxng` are still accepted.
@@ -183,6 +201,12 @@ The gateway binds loopback only; Origin is restricted to the Vite UI (1420), Tau
 | `PATCH` / `DELETE` | `/api/workspaces/{id}` | Rename / delete a workspace |
 | `GET` / `POST` | `/api/workspaces/{id}/papers` | Papers in a workspace / add a paper |
 | `PATCH` / `DELETE` | `/api/workspaces/{id}/papers?paper_id=…` | Edit `note`/`status`/`favorite`/`tags` / remove a paper |
+| `POST` | `/api/workspaces/{id}/export` | Write a collection folder; body `{"files":{"name.md":"…"}}` adds generated files |
+| `GET` / `PUT` | `/api/fulltext?paper_id=…` | Read / store a paper's Markdown full text (`{title, markdown, method, pages}`) |
+| `GET` | `/api/fulltext/index` | Which papers have Markdown full text |
+| `GET` | `/api/ocr/lang/{lang}.traineddata.gz` | OCR model, downloaded once and cached locally |
+| `GET` | `/api/rankings` | Journal ranking status |
+| `POST` | `/api/rankings/update` · `/api/rankings/import` | Download the SCImago ranking / import its CSV (`{"csv":"…"}`) |
 | `POST` | `/mcp` | MCP Streamable HTTP (notifications answer 202) |
 | `GET` | `/sse` | SSE stream for legacy MCP clients |
 | `POST` | `/messages?session_id=…` | JSON-RPC for an SSE session; answered on the matching stream |

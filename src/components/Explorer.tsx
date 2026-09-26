@@ -27,6 +27,7 @@ import { apaCitation, bibtexCitation } from '../lib/citation';
 import { getPaperKind, KIND_META, PaperKind } from '../lib/paperKind';
 import { gatewayFetch } from '../lib/gateway';
 import { canDownloadPdf, requestPdfDownload } from '../lib/pdfDownload';
+import { AddToCollectionMenu } from './AddToCollectionMenu';
 import { useSelection } from '../lib/useSelection';
 import { bibtexLibrary, risLibrary } from '../lib/citation';
 import { SourceLimiterModal } from './SourceLimiterModal';
@@ -1252,6 +1253,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
               <span style={{ color: 'var(--primary-cyan)', fontWeight: 600 }}>
                 {selection.count} selected
               </span>
+              <AddToCollectionMenu papers={selectedPapers} />
               <button
                 id="export-selected-ris"
                 type="button"
