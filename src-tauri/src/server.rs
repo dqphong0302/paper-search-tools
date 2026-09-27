@@ -1577,10 +1577,23 @@ async fn fetch_pdf(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, PdfFe
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_lowercase();
-    let bytes = resp
-        .bytes()
+    // The whole file is held in memory before it is written, so an unbounded
+    // body (a mislabelled video, a hostile server) could exhaust RAM.
+    if resp.content_length().is_some_and(|length| length > MAX_PDF_BYTES) {
+        return Err(PdfFetchError::NotPdf("the file is larger than the 200 MB limit"));
+    }
+    let mut resp = resp;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
         .await
-        .map_err(|e| PdfFetchError::Network(e.to_string()))?;
+        .map_err(|e| PdfFetchError::Network(e.to_string()))?
+    {
+        if bytes.len() + chunk.len() > MAX_PDF_BYTES as usize {
+            return Err(PdfFetchError::NotPdf("the file is larger than the 200 MB limit"));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
     // Paywalled links answer 200 with an HTML landing page; writing that to a
     // .pdf would report a successful download of a file no reader can open.
     if !bytes.starts_with(b"%PDF") {
@@ -1590,8 +1603,10 @@ async fn fetch_pdf(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, PdfFe
             "the downloaded content is not a PDF"
         }));
     }
-    Ok(bytes.to_vec())
+    Ok(bytes)
 }
+
+const MAX_PDF_BYTES: u64 = 200 * 1024 * 1024;
 
 /// Other open-access PDF copies of a DOI, from OpenAlex and (when an email is
 /// configured) Unpaywall, best first.

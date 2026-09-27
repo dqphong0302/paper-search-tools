@@ -59,6 +59,8 @@ export const Collections: React.FC = () => {
   const [job, setJob] = useState<{ done: number; total: number } | null>(null);
   const [failures, setFailures] = useState<{ paper: Paper; reason: string }[]>([]);
   const stopRef = useRef(false);
+  // Leaving the page stops a running batch instead of letting it run on unseen.
+  useEffect(() => () => { stopRef.current = true; }, []);
 
   const active = collections.find((collection) => collection.id === activeId) ?? null;
 

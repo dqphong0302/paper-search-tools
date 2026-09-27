@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, Check, ChevronLeft, ChevronRight, Copy, FileDown, Loader2, ScanText, Search, X, ZoomIn, ZoomOut } from 'lucide-react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { gatewayFetch } from '../lib/gateway';
-import { ExtractedPages, extractPages, loadPdf, OcrMode, saveFulltext, toMarkdown } from '../lib/pdfText';
+import { closePdf, ExtractedPages, extractPages, loadPdf, OcrMode, saveFulltext, toMarkdown } from '../lib/pdfText';
 import { Paper } from '../types';
 
 interface PdfDocument {
@@ -39,26 +39,37 @@ export const PdfReaderModal: React.FC<{ document: PdfDocument | null; onClose: (
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!document) return;
+    if (!document) {
+      setPdf(null);
+      return;
+    }
     let active = true;
+    let loaded: PDFDocumentProxy | null = null;
     setLoading(true);
     setError('');
     setPdf(null);
     setPageText([]);
+    setExtracted(null);
     setPageNumber(1);
     void (async () => {
       try {
         const response = await gatewayFetch(`/api/downloads/${encodeURIComponent(document.id)}/content`);
         if (!response.ok) throw new Error(`PDF could not be loaded (HTTP ${response.status})`);
-        const loaded = await loadPdf(await response.arrayBuffer());
+        loaded = await loadPdf(await response.arrayBuffer());
+        // Closed or switched while loading: release it straight away.
         if (active) setPdf(loaded);
+        else void closePdf(loaded);
       } catch (cause) {
         if (active) setError((cause as Error).message);
       } finally {
         if (active) setLoading(false);
       }
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+      // Every opened PDF stays decoded in the pdf.js worker until destroyed.
+      void closePdf(loaded);
+    };
   }, [document]);
 
   useEffect(() => {

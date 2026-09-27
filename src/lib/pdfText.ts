@@ -41,10 +41,24 @@ const MIN_TEXT_CHARS = 40;
 
 export const DEFAULT_OCR_LANGUAGES = 'eng+vie';
 
+type PdfWorker = InstanceType<typeof import('pdfjs-dist/legacy/build/pdf.mjs')['PDFWorker']>;
+let pdfWorker: PdfWorker | null = null;
+
+/**
+ * Opens a PDF on one shared pdf.js worker. Without it every document spawned
+ * its own worker thread, and each one lived (holding the decoded file) until
+ * the app was closed. Release documents with {@link closePdf}.
+ */
 export async function loadPdf(data: ArrayBuffer): Promise<PDFDocumentProxy> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-  return pdfjs.getDocument({ data }).promise;
+  if (!pdfWorker || pdfWorker.destroyed) pdfWorker = new pdfjs.PDFWorker();
+  return pdfjs.getDocument({ data, worker: pdfWorker }).promise;
+}
+
+/** Frees a document's memory in the shared worker; the worker itself stays up. */
+export async function closePdf(pdf: PDFDocumentProxy | null | undefined): Promise<void> {
+  if (pdf) await pdf.loadingTask.destroy().catch(() => undefined);
 }
 
 /**
@@ -114,6 +128,13 @@ async function pageText(page: PDFPageProxy): Promise<string> {
 
 type OcrWorker = Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>>;
 let ocrWorker: { languages: string; worker: Promise<OcrWorker> } | null = null;
+let ocrIdleTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * The Tesseract worker holds its WebAssembly heap and language models (well over
+ * 100 MB) for as long as it lives, so it is shut down after a minute unused.
+ */
+const OCR_IDLE_MS = 60_000;
 
 const supportsWasmSimd = () => {
   try {
@@ -128,6 +149,7 @@ const supportsWasmSimd = () => {
 
 /** One shared Tesseract worker; models are served (and cached) by the local gateway. */
 function getOcrWorker(languages: string): Promise<OcrWorker> {
+  clearTimeout(ocrIdleTimer);
   if (ocrWorker?.languages === languages) return ocrWorker.worker;
   const previous = ocrWorker;
   const worker = import('tesseract.js').then(async ({ createWorker, OEM }) => {
@@ -146,6 +168,7 @@ function getOcrWorker(languages: string): Promise<OcrWorker> {
 }
 
 export async function terminateOcr(): Promise<void> {
+  clearTimeout(ocrIdleTimer);
   const current = ocrWorker;
   ocrWorker = null;
   if (current) await (await current.worker).terminate().catch(() => undefined);
@@ -159,12 +182,18 @@ async function ocrPage(page: PDFPageProxy, languages: string): Promise<string> {
   canvas.height = Math.ceil(viewport.height);
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas is not available for OCR');
-  await page.render({ canvas, canvasContext: context, viewport }).promise;
-  const worker = await getOcrWorker(languages);
-  const { data } = await worker.recognize(canvas);
-  canvas.width = 0;
-  canvas.height = 0;
-  return tidyText(data.text);
+  try {
+    await page.render({ canvas, canvasContext: context, viewport }).promise;
+    const worker = await getOcrWorker(languages);
+    const { data } = await worker.recognize(canvas);
+    return tidyText(data.text);
+  } finally {
+    // A 200-dpi page is ~30 MB of pixels; release it now rather than at GC.
+    canvas.width = 0;
+    canvas.height = 0;
+    clearTimeout(ocrIdleTimer);
+    ocrIdleTimer = setTimeout(() => void terminateOcr(), OCR_IDLE_MS);
+  }
 }
 
 // ---- Extraction ---------------------------------------------------------------
@@ -252,6 +281,6 @@ export async function convertDownloadToMarkdown(
     await saveFulltext(paper, markdown, extracted);
     return { markdown, extracted };
   } finally {
-    await pdf.loadingTask.destroy();
+    await closePdf(pdf);
   }
 }
