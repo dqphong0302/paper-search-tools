@@ -405,6 +405,9 @@ mod tests {
     async fn stores_markdown_and_exports_a_collection_bundle() {
         let dir = std::env::temp_dir().join(format!("sg-fulltext-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
+        // macOS temp dirs sit behind the /var -> /private/var symlink, which
+        // the download-directory check rightly refuses.
+        let dir = std::fs::canonicalize(dir).unwrap();
         let state = AppState {
             db: crate::db::Database::in_memory().unwrap(),
             engine: std::sync::Arc::new(crate::engine::AcademicEngine::new()),

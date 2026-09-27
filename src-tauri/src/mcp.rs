@@ -1197,6 +1197,9 @@ mod tests {
         let state = state();
         let dir = std::env::temp_dir().join(format!("sg-mcp-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
+        // macOS temp dirs sit behind the /var -> /private/var symlink, which
+        // the download-directory check rightly refuses.
+        let dir = std::fs::canonicalize(dir).unwrap();
         state.db.set_config("download_directory", &dir.to_string_lossy()).unwrap();
         let workspace = state.db.create_workspace("Review", None).unwrap();
         let paper = json!({"id":"p1","title":"Paper one","authors":["A B"],"source":"test","open_access":false});
