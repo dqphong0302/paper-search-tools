@@ -25,6 +25,9 @@ export interface Biblio {
   issn?: string;
   publisher?: string;
   keywords?: string[];
+  /** OpenAlex primary topic and field. */
+  topic?: string;
+  field?: string;
 }
 
 export interface Workspace {

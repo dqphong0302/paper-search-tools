@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Activity,
+  Award,
   AlertTriangle,
   BarChart3,
   BookOpen,
@@ -38,6 +39,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { gatewayFetch, setGatewayToken } from '../lib/gateway';
 import { readSettings, saveSettings } from '../lib/settings';
 import { BackupRestore } from './BackupRestore';
+import { JournalRankings } from './JournalRankings';
 import { UpdateCenter } from './UpdateCenter';
 
 interface SettingsPageProps {
@@ -1418,6 +1420,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ port }) => {
               <Trash2 size={14} />
               <span>{clearCacheSuccess ? 'Cache Cleared!' : 'Clear Search Cache'}</span>
             </button>
+          </Card>
+
+          <Card title="Journal Rankings (Q1–Q4)" subtitle="SCImago SJR quartiles shown on papers and used to group collections" icon={<Award size={16} style={{ color: 'var(--status-amber)' }} />}>
+            <JournalRankings />
           </Card>
 
           <Card title="Backup & Restore" subtitle="Portable local backup of research data" icon={<Database size={16} style={{ color: 'var(--primary-cyan)' }} />}>

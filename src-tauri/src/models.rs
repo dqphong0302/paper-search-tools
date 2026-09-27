@@ -40,6 +40,11 @@ pub struct Biblio {
     pub publisher: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keywords: Vec<String>,
+    /// OpenAlex primary topic and its field, used to group a collection by subject.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub topic: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
 }
 
 impl Biblio {
@@ -60,6 +65,8 @@ impl Biblio {
         fill(&mut self.pages, other.pages);
         fill(&mut self.issn, other.issn);
         fill(&mut self.publisher, other.publisher);
+        fill(&mut self.topic, other.topic);
+        fill(&mut self.field, other.field);
         if self.keywords.is_empty() {
             self.keywords = other.keywords;
         }

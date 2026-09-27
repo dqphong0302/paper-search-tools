@@ -11,7 +11,8 @@ export function canDownloadPdf(paper: Paper): boolean {
 
 /** Asks the gateway to download a paper's PDF; the DOI lets it fall back to other OA copies. */
 export async function requestPdfDownload(
-  paper: Paper
+  paper: Paper,
+  workspaceId?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const res = await gatewayFetch('/api/download', {
@@ -24,6 +25,7 @@ export async function requestPdfDownload(
         doi: paper.doi,
         source: paper.source,
         year: paper.year,
+        workspace_id: workspaceId,
       }),
     });
     const json = await res.json().catch(() => null);

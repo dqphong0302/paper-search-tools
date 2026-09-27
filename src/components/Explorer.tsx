@@ -27,6 +27,8 @@ import { apaCitation, bibtexCitation } from '../lib/citation';
 import { getPaperKind, KIND_META, PaperKind } from '../lib/paperKind';
 import { gatewayFetch } from '../lib/gateway';
 import { canDownloadPdf, requestPdfDownload } from '../lib/pdfDownload';
+import { AddToCollectionMenu } from './AddToCollectionMenu';
+import { RankingsBanner } from './RankingsBanner';
 import { useSelection } from '../lib/useSelection';
 import { bibtexLibrary, risLibrary } from '../lib/citation';
 import { SourceLimiterModal } from './SourceLimiterModal';
@@ -56,7 +58,10 @@ function sourceMessage(name: string, error?: string | null, fallback = 'unknown 
 
 type Scope = string;
 type SourceFilter = 'all' | SourceGroup | 'interested';
-type SortKey = 'relevance' | 'evaluation' | 'pdf' | 'year' | 'citations';
+type SortKey = 'relevance' | 'evaluation' | 'pdf' | 'year' | 'citations' | 'quartile';
+type QuartileFilter = 'all' | 'Q1' | 'Q1-Q2' | 'ranked';
+/** Q1 → 1 … Q4 → 4; unranked journals sort last. */
+const quartileRank = (paper: Paper) => (/^Q[1-4]$/.test(paper.quartile ?? '') ? Number(paper.quartile![1]) : 9);
 type MeshField = 'mh' | 'majr' | 'tiab' | 'ti' | 'all';
 
 interface MeshGroup {
@@ -182,6 +187,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [kindFilter, setKindFilter] = useState<'all' | PaperKind>('all');
+  const [quartileFilter, setQuartileFilter] = useState<QuartileFilter>('all');
   const [searchScope, setSearchScope] = useState<Scope>(AVAILABLE_PRESETS.some((preset) => preset.id === initialScope) ? initialScope : 'default');
   const [yearMin, setYearMin] = useState('');
   const [yearMax, setYearMax] = useState('');
@@ -500,9 +506,12 @@ export const Explorer: React.FC<ExplorerProps> = ({
       if (oaOnly && !(paper.open_access || paper.pdf_url)) return false;
       if (recommendedPdfOnly && !evaluatePaper(paper).recommendedPdf) return false;
       if (kindFilter !== 'all' && getPaperKind(paper) !== kindFilter) return false;
+      if (quartileFilter === 'ranked' && quartileRank(paper) > 4) return false;
+      if (quartileFilter === 'Q1' && quartileRank(paper) !== 1) return false;
+      if (quartileFilter === 'Q1-Q2' && quartileRank(paper) > 2) return false;
       return true;
     });
-  }, [results, oaOnly, recommendedPdfOnly, kindFilter]);
+  }, [results, oaOnly, recommendedPdfOnly, kindFilter, quartileFilter]);
 
   const sourceCounts = useMemo(() => {
     const counts = Object.fromEntries(
@@ -530,6 +539,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
     return [...base].sort((a, b) => {
       if (sortKey === 'year') return (b.year || 0) - (a.year || 0);
       if (sortKey === 'citations') return (b.citations || 0) - (a.citations || 0);
+      if (sortKey === 'quartile') return quartileRank(a) - quartileRank(b) || (b.citations || 0) - (a.citations || 0);
       if (sortKey === 'pdf') return evaluatePaper(b).pdfScore - evaluatePaper(a).pdfScore;
       return evaluatePaper(b).overall - evaluatePaper(a).overall;
     });
@@ -1172,6 +1182,22 @@ export const Explorer: React.FC<ExplorerProps> = ({
               </select>
             </label>
 
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="SCImago journal quartile; load the ranking in Settings → Gateway & Security">
+              <span>Quartile</span>
+              <select
+                id="filter-quartile"
+                className="field-input"
+                style={{ width: 'auto', padding: '4px 8px', fontSize: 12 }}
+                value={quartileFilter}
+                onChange={(e) => setQuartileFilter(e.target.value as QuartileFilter)}
+              >
+                <option value="all">Any</option>
+                <option value="Q1">Q1 only</option>
+                <option value="Q1-Q2">Q1–Q2</option>
+                <option value="ranked">Ranked journals</option>
+              </select>
+            </label>
+
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>Sort</span>
               <select
@@ -1186,6 +1212,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
                 <option value="pdf">PDF availability</option>
                 <option value="year">Most recent publication year</option>
                 <option value="citations">Citation count</option>
+                <option value="quartile">Journal quartile (Q1 first)</option>
               </select>
             </label>
 
@@ -1211,6 +1238,10 @@ export const Explorer: React.FC<ExplorerProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {results && !loading && displayedPapers.length > 0 && (
+        <RankingsBanner onLoaded={() => { if (query.trim()) void runSearch(query, searchScope, oaOnly, undefined, customSources); }} />
       )}
 
       {/* -------- Selection & reference export -------- */}
@@ -1252,6 +1283,7 @@ export const Explorer: React.FC<ExplorerProps> = ({
               <span style={{ color: 'var(--primary-cyan)', fontWeight: 600 }}>
                 {selection.count} selected
               </span>
+              <AddToCollectionMenu papers={selectedPapers} />
               <button
                 id="export-selected-ris"
                 type="button"

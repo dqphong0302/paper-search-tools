@@ -214,6 +214,22 @@ pub(crate) fn gateway_router(state: AppState) -> Router {
                 .patch(update_workspace_note_handler)
                 .delete(remove_workspace_paper_handler),
         )
+        .route(
+            "/api/fulltext",
+            get(crate::fulltext::get_handler)
+                .put(crate::fulltext::put_handler)
+                .layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)),
+        )
+        .route("/api/fulltext/index", get(crate::fulltext::index_handler))
+        .route("/api/ocr/lang/{file}", get(crate::fulltext::ocr_language_handler))
+        .route("/api/workspaces/{id}/export", post(crate::fulltext::export_handler).layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)))
+        .route("/api/rankings", get(crate::rankings::status_handler))
+        .route("/api/rankings/update", post(crate::rankings::update_handler))
+        .route(
+            "/api/rankings/import",
+            // SCImago's full export is ~10 MB, above axum's 2 MB default.
+            post(crate::rankings::import_handler).layer(axum::extract::DefaultBodyLimit::max(64 * 1024 * 1024)),
+        )
         .route("/api/source/check", post(source_check_handler))
         .route("/api/test-llm", post(test_llm_handler))
         .route("/api/test-searxng", post(test_searxng_handler))
@@ -1258,6 +1274,7 @@ pub(crate) async fn search_service(
     let cached = cached_search(&state.db, &query_hash, cache_ttl_seconds);
     if let Some(cached) = cached {
         let mut cached = cached.into_page(offset, limit);
+        crate::rankings::annotate(&state.db.conn(), &mut cached.papers);
         let elapsed = started.elapsed().as_millis() as u64;
         cached.elapsed_ms = elapsed;
         state.db.log_agent_query(&AgentLog {
@@ -1308,7 +1325,8 @@ pub(crate) async fn search_service(
 
     // Partial candidate pools keep pagination stable, but expire after 30s above.
     state.db.set_cache(&query_hash, &search_req.query, &resp);
-    let resp = resp.into_page(offset, limit);
+    let mut resp = resp.into_page(offset, limit);
+    crate::rankings::annotate(&state.db.conn(), &mut resp.papers);
 
     // Log query for Agent Telemetry
     state.db.log_agent_query(&AgentLog {
@@ -1559,10 +1577,23 @@ async fn fetch_pdf(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, PdfFe
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_lowercase();
-    let bytes = resp
-        .bytes()
+    // The whole file is held in memory before it is written, so an unbounded
+    // body (a mislabelled video, a hostile server) could exhaust RAM.
+    if resp.content_length().is_some_and(|length| length > MAX_PDF_BYTES) {
+        return Err(PdfFetchError::NotPdf("the file is larger than the 200 MB limit"));
+    }
+    let mut resp = resp;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = resp
+        .chunk()
         .await
-        .map_err(|e| PdfFetchError::Network(e.to_string()))?;
+        .map_err(|e| PdfFetchError::Network(e.to_string()))?
+    {
+        if bytes.len() + chunk.len() > MAX_PDF_BYTES as usize {
+            return Err(PdfFetchError::NotPdf("the file is larger than the 200 MB limit"));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
     // Paywalled links answer 200 with an HTML landing page; writing that to a
     // .pdf would report a successful download of a file no reader can open.
     if !bytes.starts_with(b"%PDF") {
@@ -1572,8 +1603,10 @@ async fn fetch_pdf(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, PdfFe
             "the downloaded content is not a PDF"
         }));
     }
-    Ok(bytes.to_vec())
+    Ok(bytes)
 }
+
+const MAX_PDF_BYTES: u64 = 200 * 1024 * 1024;
 
 /// Other open-access PDF copies of a DOI, from OpenAlex and (when an email is
 /// configured) Unpaywall, best first.

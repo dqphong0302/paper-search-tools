@@ -32,9 +32,24 @@ const STOPWORDS = new Set([
   'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'was', 'were', 'has', 'have',
   'not', 'using', 'used', 'use', 'based', 'study', 'review', 'analysis', 'research', 'results',
   'between', 'among', 'into', 'their', 'its', 'our', 'can', 'may', 'also', 'than', 'more', 'less',
+  'which', 'these', 'those', 'there', 'been', 'being', 'such', 'both', 'each', 'other', 'however',
+  'while', 'after', 'before', 'during', 'within', 'without', 'through', 'over', 'under', 'all',
+  'but', 'who', 'how', 'what', 'when', 'where', 'here', 'had', 'did', 'does', 'one', 'two', 'new',
+  // Generic scholarly words that describe any paper rather than its subject
+  'paper', 'papers', 'article', 'articles', 'result', 'findings', 'finding', 'method', 'methods',
+  'methodology', 'approach', 'approaches', 'studies', 'data', 'background', 'objective',
+  'objectives', 'aim', 'aims', 'purpose', 'conclusion', 'conclusions', 'introduction',
+  'discussion', 'version', 'author', 'authors', 'journal', 'abstract', 'present', 'presents',
+  'proposed', 'propose', 'show', 'shows', 'showed', 'shown', 'found', 'performed', 'total',
+  'significant', 'significantly', 'including', 'associated', 'compared', 'effect', 'effects',
+  'high', 'higher', 'low', 'lower', 'first', 'three', 'various', 'different', 'important',
+  'provide', 'provides', 'overall', 'well', 'will', 'number', 'years', 'year', 'patients',
+  'case', 'cases', 'group', 'groups', 'report', 'reports', 'systematic', 'literature',
   // Vietnamese
   'của', 'và', 'cho', 'trong', 'một', 'các', 'những', 'với', 'được', 'trên', 'khi', 'này',
   'kết', 'quả', 'nghiên', 'cứu', 'phân', 'tích', 'dựa', 'theo', 'về', 'từ', 'đến', 'hay',
+  'là', 'có', 'không', 'người', 'đã', 'để', 'tại', 'như', 'bài', 'báo', 'tạp', 'chí', 'phương',
+  'pháp', 'mục', 'tiêu', 'luận', 'đánh', 'giá', 'thực', 'hiện', 'nhóm', 'năm', 'số', 'cao', 'thấp',
 ]);
 
 /** Lowercased word tokens of length > 2, minus stopwords. */
@@ -42,7 +57,7 @@ export function tokenize(text: string): string[] {
   return text
     .toLocaleLowerCase('vi')
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((token) => token.length > 2 && !STOPWORDS.has(token));
+    .filter((token) => token.length > 2 && !STOPWORDS.has(token) && !/^\d+$/.test(token));
 }
 
 function topCounts(values: string[], limit: number): Counted[] {
@@ -84,9 +99,10 @@ export function analyzeLandscape(
   const sources = topCounts(papers.map((paper) => paper.source), 8);
   const venues = topCounts(papers.map((paper) => paper.venue || ''), 6);
 
-  const terms = papers.flatMap((paper) =>
-    tokenize(`${paper.title} ${paper.abstract ?? ''}`)
-  );
+  // Count each term once per paper, so one long abstract cannot dominate.
+  const terms = papers.flatMap((paper) => [
+    ...new Set(tokenize(`${paper.title} ${paper.abstract ?? ''}`)),
+  ]);
   const topTerms = topCounts(terms, 12);
 
   const queryTokens = [...new Set(tokenize(query))];

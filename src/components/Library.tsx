@@ -21,6 +21,7 @@ import { Paper, ReadingStatus, WorkspacePaper, WorkspacePaperPatch } from '../ty
 import { isVietnamPaper, originalPaperUrl } from './Explorer';
 import { bibtexLibrary, risLibrary } from '../lib/citation';
 import { useSelection } from '../lib/useSelection';
+import { AddToCollectionMenu } from './AddToCollectionMenu';
 import { getPaperKind, KIND_META } from '../lib/paperKind';
 import { FulltextViewerModal } from './FulltextViewerModal';
 import { AiAgentExportModal } from './AiAgentExportModal';
@@ -41,6 +42,8 @@ interface LibraryProps {
   onRemovePaper: (id: string) => void;
   onUpdatePaper: (id: string, patch: WorkspacePaperPatch) => void;
   workspaceName?: string;
+  /** Collection the PDFs are downloaded for; recorded with each download. */
+  workspaceId?: string;
 }
 
 export const Library: React.FC<LibraryProps> = ({
@@ -48,6 +51,7 @@ export const Library: React.FC<LibraryProps> = ({
   onRemovePaper,
   onUpdatePaper,
   workspaceName = 'Interest Library',
+  workspaceId,
 }) => {
   const [exported, setExported] = useState(false);
   const [exportedBib, setExportedBib] = useState(false);
@@ -127,7 +131,7 @@ export const Library: React.FC<LibraryProps> = ({
   const handleDownloadPaperPdf = async (paper: Paper): Promise<boolean> => {
     if (!canDownloadPdf(paper)) return false;
     setDownloadingIds((prev) => new Set(prev).add(paper.id));
-    const result = await requestPdfDownload(paper);
+    const result = await requestPdfDownload(paper, workspaceId);
     setDownloadingIds((prev) => {
       const next = new Set(prev);
       next.delete(paper.id);
@@ -345,6 +349,7 @@ export const Library: React.FC<LibraryProps> = ({
               <span style={{ color: 'var(--primary-cyan)', fontWeight: 600 }}>
                 {selection.count} selected
               </span>
+              <AddToCollectionMenu papers={papersToExport()} />
               <button type="button" className="action-btn" onClick={selection.clear} style={{ padding: '4px 10px' }}>
                 Clear selection
               </button>

@@ -37,4 +37,16 @@ describe('analyzeLandscape', () => {
     expect(landscape.queryCoverage.find((q) => q.term === 'cancer')?.count).toBe(2);
     expect(landscape.queryCoverage.find((q) => q.term === 'therapy')?.count).toBe(1);
   });
+
+  it('ignores generic scholarly words and counts a term once per paper', () => {
+    const landscape = analyzeLandscape([
+      paper({ title: 'Paper version results', abstract: 'CRISPR CRISPR CRISPR methods 2024' }),
+      paper({ title: 'Base editing', abstract: 'editing of hemoglobin' }),
+      paper({ title: 'CRISPR screening' }),
+    ], '');
+    const terms = Object.fromEntries(landscape.topTerms.map((t) => [t.key, t.count]));
+    expect(terms.crispr).toBe(2);
+    expect(terms.editing).toBe(1);
+    for (const noise of ['paper', 'version', 'results', 'methods', '2024']) expect(terms[noise]).toBeUndefined();
+  });
 });

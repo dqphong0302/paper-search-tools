@@ -22,6 +22,7 @@ import { apaCitation, bibtexCitation } from '../lib/citation';
 import { canDownloadPdf } from '../lib/pdfDownload';
 import { evaluatePaper, getSourceGroup, SOURCE_GROUPS } from '../lib/paperEvaluation';
 import { getPaperKind, KIND_META } from '../lib/paperKind';
+import { QuartileBadge } from './QuartileBadge';
 
 export interface FulltextViewerModalProps {
   paper: Paper | null;
@@ -259,7 +260,7 @@ export const FulltextViewerModal: React.FC<FulltextViewerModalProps> = ({
               >
                 <Award size={11} /> SCREENING {evaluation.overall}/100
               </span>
-              {paper.quartile && <span className="badge badge-q1">{paper.quartile}</span>}
+              <QuartileBadge quartile={paper.quartile} />
             </div>
 
             <h2 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.35, color: 'var(--text-main)' }}>
