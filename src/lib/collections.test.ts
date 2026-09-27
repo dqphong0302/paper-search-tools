@@ -38,13 +38,13 @@ describe('collections', () => {
     expect(md).toContain('### Q1 (1)');
   });
 
-  it('tells the agent which MCP tools to call for the collection', () => {
+  it('tells the agent which collection to read through MCP', () => {
     const collection: Workspace = { id: 'ws-1', name: 'Review', created_at: 0, updated_at: 0, paper_count: 3, query_count: 0 };
-    const prompt = agentHandoffPrompt(collection, 'Compare efficacy', '/tmp/review');
+    const prompt = agentHandoffPrompt(collection, '/tmp/review');
     expect(prompt).toContain('collection_id: "ws-1"');
     expect(prompt).toContain('get_paper_fulltext');
     expect(prompt).toContain('/tmp/review');
-    expect(prompt.endsWith('Task: Compare efficacy')).toBe(true);
+    expect(agentHandoffPrompt(collection)).not.toContain('on disk');
   });
 
   it('runs a pool with bounded concurrency and stops taking new items', async () => {

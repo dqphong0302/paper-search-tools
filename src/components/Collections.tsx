@@ -49,7 +49,6 @@ export const Collections: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
-  const [task, setTask] = useState('');
   const [busy, setBusy] = useState<'pdf' | 'markdown' | 'export' | null>(null);
   const [progress, setProgress] = useState('');
   const [notice, setNotice] = useState('');
@@ -213,7 +212,7 @@ export const Collections: React.FC = () => {
     void navigator.clipboard.writeText(text).then(() => { setCopied(what); window.setTimeout(() => setCopied(null), 1800); });
   };
 
-  const prompt = active ? agentHandoffPrompt(active, task, exported?.path) : '';
+  const prompt = active ? agentHandoffPrompt(active, exported?.path) : '';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -290,7 +289,7 @@ export const Collections: React.FC = () => {
               <span>3 · Export folder for AI</span>
             </button>
             <button type="button" className="action-btn action-btn-primary" onClick={() => setView('agent')}>
-              <Bot size={14} /><span>4 · Hand off to agent</span>
+              <Bot size={14} /><span>4 · Use in AI clients</span>
             </button>
           </div>
           {job && (
@@ -335,7 +334,7 @@ export const Collections: React.FC = () => {
             {([
               ['overview', 'Overview', <BarChart3 key="o" size={14} />],
               ['papers', 'Papers', <ListChecks key="p" size={14} />],
-              ['agent', 'AI agent', <Bot key="a" size={14} />],
+              ['agent', 'AI clients', <Bot key="a" size={14} />],
             ] as const).map(([id, label, icon]) => (
               <button key={id} id={`collection-view-${id}`} type="button" role="tab" aria-selected={view === id}
                 className={`segmented-item ${view === id ? 'active' : ''}`} onClick={() => setView(id)}>
@@ -428,23 +427,19 @@ export const Collections: React.FC = () => {
 
           {/* ---- Agent hand-off ---- */}
           {view === 'agent' && <section id="collection-handoff" className="cockpit-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }} aria-labelledby="handoff-heading">
-            <h3 id="handoff-heading" style={{ margin: 0, fontSize: 15 }}><Bot size={15} style={{ verticalAlign: -2 }} /> Hand off to an AI agent</h3>
+            <h3 id="handoff-heading" style={{ margin: 0, fontSize: 15 }}><Bot size={15} style={{ verticalAlign: -2 }} /> Use in Claude, Codex or Antigravity</h3>
             <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-              Agents connected to ScholarGate over MCP (Claude, Codex, Cursor… — set up in <b>Settings → AI Clients</b>) read this collection with
-              {' '}<code>get_collection</code> and each paper&apos;s Markdown with <code>get_paper_fulltext</code>. Describe the task, then paste the prompt into the agent.
+              ScholarGate does not run an AI itself — it serves this collection to the AI clients you connected in <b>Settings → AI Clients</b>.
+              In the client, paste the note below, then ask your research question there.
             </p>
-            <textarea
-              id="handoff-task"
-              className="field-input"
-              rows={3}
-              placeholder="e.g. Write a narrative review of the efficacy and safety evidence, grouped by topic, and list research gaps."
-              value={task}
-              onChange={(event) => setTask(event.target.value)}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+              <span>Collection ID</span>
+              <code>{active.id}</code>
+            </div>
             <pre className="collection-prompt">{prompt}</pre>
             <div>
               <button id="copy-handoff-prompt" type="button" className="action-btn action-btn-primary" onClick={() => copy(prompt, 'prompt')}>
-                {copied === 'prompt' ? <Check size={13} /> : <Copy size={13} />} {copied === 'prompt' ? 'Copied' : 'Copy prompt'}
+                {copied === 'prompt' ? <Check size={13} /> : <Copy size={13} />} {copied === 'prompt' ? 'Copied' : 'Copy note for the AI client'}
               </button>
             </div>
           </section>}
