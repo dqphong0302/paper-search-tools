@@ -41,6 +41,44 @@ impl Sweeps {
 #[cfg(test)]
 mod library_tests {
     use super::*;
+
+    #[test]
+    fn re_downloading_a_file_keeps_one_history_row_per_collection() {
+        let db = Database::in_memory().unwrap();
+        let record = |id: &str, path: &str, workspace: Option<&str>, at: u64| DownloadRecord {
+            id: id.into(),
+            paper_id: "p".into(),
+            title: "t".into(),
+            pdf_url: "u".into(),
+            local_path: path.into(),
+            file_size_bytes: 1,
+            source: None,
+            year: None,
+            downloaded_at: at,
+            workspace_id: workspace.map(str::to_string),
+        };
+        db.add_download_record(&record("a", "/x.pdf", None, 1));
+        db.add_download_record(&record("b", "/x.pdf", None, 2));
+        db.add_download_record(&record("c", "/x.pdf", Some("ws"), 3));
+        db.add_download_record(&record("d", "/y.pdf", None, 4));
+        let ids: Vec<_> = db.get_download_history(None).into_iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec!["d", "c", "b"]);
+
+        // Rows written before the fix are folded when the database opens.
+        {
+            let conn = db.conn();
+            conn.execute(
+                "INSERT INTO download_history (id, paper_id, title, pdf_url, local_path, file_size_bytes, downloaded_at, workspace_id)
+                 VALUES ('old', 'p', 't', 'u', '/y.pdf', 1, 0, NULL)",
+                [],
+            )
+            .unwrap();
+        }
+        let conn = std::mem::replace(&mut *db.conn(), Connection::open_in_memory().unwrap());
+        let reopened = Database::from_connection(conn, false).unwrap();
+        let ids: Vec<_> = reopened.get_download_history(None).into_iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec!["d", "c", "b"]);
+    }
     #[test]
     fn cache_telemetry_comes_from_academic_search_logs() {
         let db = Database::in_memory().unwrap();
@@ -640,10 +678,26 @@ impl Database {
                 ON download_history(workspace_id, downloaded_at DESC);
              CREATE INDEX IF NOT EXISTS idx_download_history_paper
                 ON download_history(paper_id);
+             CREATE INDEX IF NOT EXISTS idx_download_history_file
+                ON download_history(local_path, workspace_id);
              CREATE INDEX IF NOT EXISTS idx_search_cache_created
                 ON search_cache(created_at DESC);
              CREATE INDEX IF NOT EXISTS idx_saved_papers_saved_at
                 ON saved_papers(saved_at DESC);",
+        )?;
+
+        // Re-downloading a paper overwrites the same file, but each download
+        // used to add another history row. Keep only the newest row per file
+        // (and per collection), so existing duplicates are folded once too.
+        conn.execute(
+            "DELETE FROM download_history WHERE rowid NOT IN (
+                SELECT rowid FROM (
+                    SELECT rowid, ROW_NUMBER() OVER (
+                        PARTITION BY local_path, workspace_id ORDER BY downloaded_at DESC, rowid DESC
+                    ) AS n FROM download_history
+                ) WHERE n = 1
+            )",
+            [],
         )?;
 
         bootstrap_default_workspace(&conn)?;
@@ -1263,6 +1317,11 @@ impl Database {
     pub fn add_download_record(&self, record: &DownloadRecord) {
         {
             let conn = self.conn();
+            // The same file downloaded again replaces its earlier record.
+            let _ = conn.execute(
+                "DELETE FROM download_history WHERE local_path = ?1 AND workspace_id IS ?2",
+                params![record.local_path, record.workspace_id],
+            );
             let _ = conn.execute(
                 "INSERT OR REPLACE INTO download_history (id, paper_id, title, pdf_url, local_path, file_size_bytes, source, year, downloaded_at, workspace_id) 
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
