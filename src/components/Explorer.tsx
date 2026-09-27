@@ -628,7 +628,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
 
         {/* Quick Domain Presets & Source Limiter Bar */}
         <div
-          className="discipline-bar"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -641,22 +640,6 @@ export const Explorer: React.FC<ExplorerProps> = ({
             borderRadius: 'var(--radius-md)',
           }}
         >
-          {/* Phones: one dropdown instead of a row of pills that mostly scrolls out of view */}
-          <label className="quick-discipline-select">
-            <span>Discipline</span>
-            <select
-              id="discipline-select"
-              className="field-input"
-              value={customSources.length === 0 && (searchScope === 'default' || QUICK_DISCIPLINES.some((p) => p.id === searchScope)) ? searchScope : 'default'}
-              onChange={(event) => handleScopeChange(event.target.value as Scope)}
-            >
-              <option value="default">Default</option>
-              {QUICK_DISCIPLINES.map((preset) => (
-                <option key={preset.id} value={preset.id}>{preset.label}</option>
-              ))}
-            </select>
-          </label>
-
           {/* Quick Domain Pills — one scrollable line so results start higher up */}
           <div
             className="quick-pill-row"
